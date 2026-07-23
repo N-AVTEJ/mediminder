@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Centered pill capsule and medical cross icon -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,28 L60,28 C68.8,28 76,35.2 76,44 C76,52.8 68.8,60 60,60 L48,60 C39.2,60 32,52.8 32,44 C32,35.2 39.2,28 48,28 Z" />
+    <path
+        android:fillColor="#80CBC4"
+        android:pathData="M54,28 L60,28 C68.8,28 76,35.2 76,44 C76,52.8 68.8,60 60,60 L54,60 Z" />
+    <!-- Medical Cross -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,68 L58,68 L58,74 L64,74 L64,82 L58,82 L58,88 L50,88 L50,82 L44,82 L44,74 L50,74 Z" />
+</vector>

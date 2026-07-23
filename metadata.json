@@ -1,0 +1,6 @@
+{
+  "name": "Medicine Reminder",
+  "description": "Elderly-friendly medicine reminder app with daily schedule, prescription scanner, and guardian alerts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
