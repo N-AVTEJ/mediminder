@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,7 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.api.ScannedMedication
+import com.example.data.api.ScannedMedicationItem
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.MedicineViewModel
 
@@ -35,7 +36,9 @@ fun ScanScreen(
     onSavedSuccessfully: () -> Unit
 ) {
     val isScanning by viewModel.isScanning.collectAsState()
-    val scannedMedication by viewModel.scannedMedication.collectAsState()
+    val scanResult by viewModel.scanResult.collectAsState()
+    val scanError by viewModel.scanError.collectAsState()
+    val editableList by viewModel.editableScannedList.collectAsState()
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -108,9 +111,9 @@ fun ScanScreen(
                         )
 
                         Text(
-                            text = "Upload or take a photo of your prescription bottle, box, or paper. Gemini AI will automatically extract medicine details.",
+                            text = "Upload a photo of your prescription or medicine container. Gemini AI will extract details into an editable list.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = OnMintContainer.copy(alpha = 0.8f),
+                            color = OnMintContainer.copy(alpha = 0.85f),
                             modifier = Modifier.padding(top = 4.dp)
                         )
 
@@ -164,16 +167,16 @@ fun ScanScreen(
                         onClick = { viewModel.loadSamplePrescription(0) }
                     )
                     SamplePrescriptionCard(
-                        title = "Lisinopril",
-                        subtitle = "10mg BP Pill",
+                        title = "Lisinopril + Stat",
+                        subtitle = "Dual RX Sample",
                         modifier = Modifier
                             .weight(1f)
                             .testTag("sample_rx_1"),
                         onClick = { viewModel.loadSamplePrescription(1) }
                     )
                     SamplePrescriptionCard(
-                        title = "Vitamin D3",
-                        subtitle = "2000 IU Capsule",
+                        title = "Metformin",
+                        subtitle = "500mg ER Meal",
                         modifier = Modifier
                             .weight(1f)
                             .testTag("sample_rx_2"),
@@ -209,7 +212,7 @@ fun ScanScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Reading medicine name, dosage, and schedule...",
+                                    text = "Extracting medicine name, dose, frequency & duration...",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = TextSecondary
                                 )
@@ -219,16 +222,189 @@ fun ScanScreen(
                 }
             }
 
-            // Scanned Result Card Preview
-            scannedMedication?.let { scanned ->
+            // Friendly Error Card
+            scanError?.let { error ->
                 item {
-                    ScannedResultCard(
-                        scanned = scanned,
-                        onSave = { updatedScanned ->
-                            viewModel.saveScannedMedication(updatedScanned)
-                            onSavedSuccessfully()
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("scan_error_card"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CameraEnhance,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Text(
+                                    text = "Prescription Read Issue",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Button(
+                                    onClick = { photoPickerLauncher.launch("image/*") },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Try Clearer Photo")
+                                }
+
+                                OutlinedButton(
+                                    onClick = { viewModel.clearScanState() },
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Dismiss")
+                                }
+                            }
                         }
+                    }
+                }
+            }
+
+            // Scanned Editable Results List
+            if (editableList.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = TealPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text(
+                                text = "Extracted Medications (${editableList.size})",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary
+                            )
+                        }
+
+                        // Requirement 5: Cache indicator badge
+                        if (scanResult?.isFromCache == true) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = BlueContainer,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BlueSecondary)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Bolt,
+                                        contentDescription = null,
+                                        tint = BlueSecondary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "Instant Hash Cache",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BlueSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Review and edit any extracted details before adding to your active reminders.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
                     )
+                }
+
+                // Render editable card for each extracted medication item
+                itemsIndexed(editableList, key = { index, item -> item.id }) { index, item ->
+                    EditableMedicationCard(
+                        index = index,
+                        item = item,
+                        canDelete = editableList.size > 1,
+                        onUpdate = { updated -> viewModel.updateEditableItem(index, updated) },
+                        onDelete = { viewModel.removeEditableItem(index) }
+                    )
+                }
+
+                item {
+                    OutlinedButton(
+                        onClick = { viewModel.addEmptyEditableItem() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("add_another_scanned_med_btn"),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add Another Medicine Row")
+                    }
+                }
+
+                item {
+                    Button(
+                        onClick = {
+                            viewModel.confirmAndSaveAllScannedMedications()
+                            onSavedSuccessfully()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .testTag("save_scanned_reminder_btn"),
+                        colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Confirm & Save All Reminders", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                item {
+                    TextButton(
+                        onClick = { viewModel.clearScanState() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("discard_scanned_results_btn")
+                    ) {
+                        Text("Discard Results", color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
 
@@ -269,13 +445,13 @@ private fun SamplePrescriptionCard(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
+                fontSize = 14.sp
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
-                fontSize = 12.sp
+                fontSize = 11.sp
             )
         }
     }
@@ -283,101 +459,130 @@ private fun SamplePrescriptionCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ScannedResultCard(
-    scanned: ScannedMedication,
-    onSave: (ScannedMedication) -> Unit
+private fun EditableMedicationCard(
+    index: Int,
+    item: ScannedMedicationItem,
+    canDelete: Boolean,
+    onUpdate: (ScannedMedicationItem) -> Unit,
+    onDelete: () -> Unit
 ) {
-    var medName by remember(scanned) { mutableStateOf(scanned.medicineName) }
-    var dosage by remember(scanned) { mutableStateOf(scanned.dosage) }
-    var instructions by remember(scanned) { mutableStateOf(scanned.instructions) }
-    var timeCategory by remember(scanned) { mutableStateOf(scanned.timeCategory) }
-    var suggestedTime by remember(scanned) { mutableStateOf(scanned.suggestedTimes.firstOrNull() ?: "08:00 AM") }
+    var medicineName by remember(item) { mutableStateOf(item.medicine) }
+    var dose by remember(item) { mutableStateOf(item.dose) }
+    var frequency by remember(item) { mutableStateOf(item.frequency) }
+    var durationDaysStr by remember(item) { mutableStateOf(item.durationDays.toString()) }
+    var timeCategory by remember(item) { mutableStateOf(item.timeCategory) }
+    var suggestedTime by remember(item) { mutableStateOf(item.time) }
+    var instructions by remember(item) { mutableStateOf(item.instructions) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("scanned_result_card")
-            .border(2.dp, TealPrimary, RoundedCornerShape(20.dp)),
-        shape = RoundedCornerShape(20.dp),
+            .testTag("scanned_result_card_$index")
+            .border(1.5.dp, TealPrimary.copy(alpha = 0.5f), RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(
-                    imageVector = Icons.Default.AutoAwesome,
-                    contentDescription = null,
-                    tint = TealPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
                 Text(
-                    text = "AI Extracted Prescription",
-                    style = MaterialTheme.typography.titleLarge,
+                    text = "Medicine #${index + 1}",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = TealPrimary
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = TakenGreenSurface
-                ) {
-                    Text(
-                        text = "${scanned.confidence}% Match",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = TakenGreen,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+
+                if (canDelete) {
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Remove Item",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
 
+            // Medicine Name
             OutlinedTextField(
-                value = medName,
-                onValueChange = { medName = it },
+                value = medicineName,
+                onValueChange = {
+                    medicineName = it
+                    onUpdate(item.copy(medicine = it))
+                },
                 label = { Text("Medicine Name") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("input_scanned_name"),
+                    .testTag("input_scanned_name_$index"),
                 shape = RoundedCornerShape(12.dp)
             )
 
+            // Dose & Duration Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlinedTextField(
+                    value = dose,
+                    onValueChange = {
+                        dose = it
+                        onUpdate(item.copy(dose = it))
+                    },
+                    label = { Text("Dose") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("input_scanned_dosage_$index"),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                OutlinedTextField(
+                    value = durationDaysStr,
+                    onValueChange = {
+                        durationDaysStr = it
+                        val parsed = it.toIntOrNull() ?: 7
+                        onUpdate(item.copy(durationDays = parsed))
+                    },
+                    label = { Text("Duration (Days)") },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("input_scanned_duration_$index"),
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+
+            // Frequency
             OutlinedTextField(
-                value = dosage,
-                onValueChange = { dosage = it },
-                label = { Text("Dosage") },
+                value = frequency,
+                onValueChange = {
+                    frequency = it
+                    onUpdate(item.copy(frequency = it))
+                },
+                label = { Text("Frequency") },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("input_scanned_dosage"),
+                    .testTag("input_scanned_frequency_$index"),
                 shape = RoundedCornerShape(12.dp)
             )
 
-            OutlinedTextField(
-                value = instructions,
-                onValueChange = { instructions = it },
-                label = { Text("Instructions") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("input_scanned_instructions"),
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            // Time Category Chips
+            // Schedule Category Chips
             Text(
-                text = "Reminder Schedule Category",
-                style = MaterialTheme.typography.titleMedium,
+                text = "Reminder Schedule",
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val categories = listOf("Morning", "Afternoon", "Evening", "Night")
                 categories.forEach { cat ->
@@ -391,38 +596,30 @@ private fun ScannedResultCard(
                                 "Evening" -> "06:30 PM"
                                 else -> "09:00 PM"
                             }
+                            onUpdate(
+                                item.copy(
+                                    timeCategory = cat,
+                                    time = suggestedTime
+                                )
+                            )
                         },
-                        label = { Text(cat, fontSize = 14.sp) },
+                        label = { Text(cat, fontSize = 12.sp) },
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = {
-                    onSave(
-                        scanned.copy(
-                            medicineName = medName,
-                            dosage = dosage,
-                            instructions = instructions,
-                            timeCategory = timeCategory,
-                            suggestedTimes = listOf(suggestedTime)
-                        )
-                    )
+            // Special Instructions
+            OutlinedTextField(
+                value = instructions,
+                onValueChange = {
+                    instructions = it
+                    onUpdate(item.copy(instructions = it))
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp)
-                    .testTag("save_scanned_reminder_btn"),
-                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Save to Active Reminders", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            }
+                label = { Text("Instructions") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            )
         }
     }
 }

@@ -4,8 +4,10 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.api.PrescriptionScanException
 import com.example.data.api.PrescriptionScanner
-import com.example.data.api.ScannedMedication
+import com.example.data.api.ScanResult
+import com.example.data.api.ScannedMedicationItem
 import com.example.data.db.*
 import com.example.data.repository.MedicineRepository
 import kotlinx.coroutines.flow.*
@@ -32,8 +34,14 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
-    private val _scannedMedication = MutableStateFlow<ScannedMedication?>(null)
-    val scannedMedication: StateFlow<ScannedMedication?> = _scannedMedication.asStateFlow()
+    private val _scanResult = MutableStateFlow<ScanResult?>(null)
+    val scanResult: StateFlow<ScanResult?> = _scanResult.asStateFlow()
+
+    private val _scanError = MutableStateFlow<String?>(null)
+    val scanError: StateFlow<String?> = _scanError.asStateFlow()
+
+    private val _editableScannedList = MutableStateFlow<List<ScannedMedicationItem>>(emptyList())
+    val editableScannedList: StateFlow<List<ScannedMedicationItem>> = _editableScannedList.asStateFlow()
 
     private val _userMessage = MutableStateFlow<String?>(null)
     val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
@@ -46,6 +54,12 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     fun clearUserMessage() {
         _userMessage.value = null
+    }
+
+    fun clearScanState() {
+        _scanResult.value = null
+        _scanError.value = null
+        _editableScannedList.value = emptyList()
     }
 
     fun markDoseStatus(logId: Int, status: String) {
@@ -113,67 +127,95 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     fun scanPrescriptionUri(uri: Uri?) {
         viewModelScope.launch {
             _isScanning.value = true
-            _scannedMedication.value = null
+            _scanError.value = null
+            _scanResult.value = null
+            _editableScannedList.value = emptyList()
+
             val result = prescriptionScanner.analyzePrescription(uri)
             _isScanning.value = false
-            result.onSuccess { scanned ->
-                _scannedMedication.value = scanned
-            }.onFailure {
-                _userMessage.value = "Could not scan image. Try selecting a sample prescription."
+
+            result.onSuccess { res ->
+                _scanResult.value = res
+                _editableScannedList.value = res.items.map { it.copy() }
+            }.onFailure { error ->
+                val errorMsg = when (error) {
+                    is PrescriptionScanException -> error.message ?: "Scanning failed."
+                    else -> "Unable to read prescription image. Text may be blurry or missing. Please try a clearer image."
+                }
+                _scanError.value = errorMsg
             }
+        }
+    }
+
+    fun updateEditableItem(index: Int, updatedItem: ScannedMedicationItem) {
+        val current = _editableScannedList.value.toMutableList()
+        if (index in current.indices) {
+            current[index] = updatedItem
+            _editableScannedList.value = current
+        }
+    }
+
+    fun addEmptyEditableItem() {
+        val current = _editableScannedList.value.toMutableList()
+        current.add(
+            ScannedMedicationItem(
+                medicine = "",
+                dose = "1 Tablet",
+                frequency = "Once Daily",
+                durationDays = 7,
+                timeCategory = "Morning",
+                time = "08:00 AM",
+                instructions = "Take as prescribed"
+            )
+        )
+        _editableScannedList.value = current
+    }
+
+    fun removeEditableItem(index: Int) {
+        val current = _editableScannedList.value.toMutableList()
+        if (index in current.indices) {
+            current.removeAt(index)
+            _editableScannedList.value = current
+        }
+    }
+
+    fun confirmAndSaveAllScannedMedications() {
+        viewModelScope.launch {
+            val itemsToSave = _editableScannedList.value.filter { it.medicine.isNotBlank() }
+            if (itemsToSave.isEmpty()) {
+                _userMessage.value = "Please enter at least one valid medicine name."
+                return@launch
+            }
+
+            for (item in itemsToSave) {
+                addReminder(
+                    name = item.medicine,
+                    dosage = "${item.dose} (${item.frequency}, ${item.durationDays} days)",
+                    time = item.time,
+                    timeCategory = item.timeCategory,
+                    instructions = if (item.instructions.isNotBlank()) item.instructions else "Take as prescribed",
+                    shape = "Pill"
+                )
+            }
+
+            clearScanState()
+            _userMessage.value = "Successfully saved ${itemsToSave.size} medication reminder(s)!"
         }
     }
 
     fun loadSamplePrescription(sampleIndex: Int) {
         viewModelScope.launch {
             _isScanning.value = true
-            _scannedMedication.value = null
-            val scanned = when (sampleIndex) {
-                0 -> ScannedMedication(
-                    medicineName = "Amoxicillin",
-                    dosage = "500 mg Capsule",
-                    frequency = "Twice Daily (Morning & Night)",
-                    instructions = "Take after meal with a full glass of water.",
-                    timeCategory = "Morning",
-                    suggestedTimes = listOf("08:00 AM", "08:00 PM"),
-                    confidence = 98
-                )
-                1 -> ScannedMedication(
-                    medicineName = "Lisinopril",
-                    dosage = "10 mg Tablet",
-                    frequency = "Once Daily in Morning",
-                    instructions = "Take in the morning with or without food.",
-                    timeCategory = "Morning",
-                    suggestedTimes = listOf("08:00 AM"),
-                    confidence = 96
-                )
-                else -> ScannedMedication(
-                    medicineName = "Vitamin D3",
-                    dosage = "2000 IU Softgel",
-                    frequency = "Once Daily with lunch",
-                    instructions = "Take with main meal containing healthy fats.",
-                    timeCategory = "Afternoon",
-                    suggestedTimes = listOf("01:00 PM"),
-                    confidence = 99
-                )
-            }
-            _isScanning.value = false
-            _scannedMedication.value = scanned
-        }
-    }
+            _scanError.value = null
+            _scanResult.value = null
 
-    fun saveScannedMedication(scanned: ScannedMedication) {
-        viewModelScope.launch {
-            addReminder(
-                name = scanned.medicineName,
-                dosage = scanned.dosage,
-                time = scanned.suggestedTimes.firstOrNull() ?: "08:00 AM",
-                timeCategory = scanned.timeCategory,
-                instructions = scanned.instructions,
-                shape = "Pill"
-            )
-            _scannedMedication.value = null
-            _userMessage.value = "Saved ${scanned.medicineName} to active reminders!"
+            val sampleHash = "sample_rx_hash_$sampleIndex"
+            val items = prescriptionScanner.generateDemoFallbackItems(sampleHash)
+            val res = ScanResult(items = items, isFromCache = false, imageHash = sampleHash, confidence = 98)
+
+            _isScanning.value = false
+            _scanResult.value = res
+            _editableScannedList.value = items.map { it.copy() }
         }
     }
 
