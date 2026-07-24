@@ -42,6 +42,9 @@ fun ProfileScreen(
     val fbDoses by viewModel.firebaseDoses.collectAsState()
     val fbReminders by viewModel.firebaseReminders.collectAsState()
 
+    val inventoryItems by viewModel.userInventory.collectAsState()
+    val affiliateClicks by viewModel.affiliateClicks.collectAsState()
+
     var showEditProfileModal by remember { mutableStateOf(false) }
     var showAddGuardianModal by remember { mutableStateOf(false) }
     var showFirebaseSchemaInspector by remember { mutableStateOf(false) }
@@ -247,6 +250,46 @@ fun ProfileScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = OnMintContainer
                             )
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            HorizontalDivider(color = TealPrimary.copy(alpha = 0.3f))
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = "• Supabase Table: inventory (${inventoryItems.size} items)",
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary
+                            )
+                            inventoryItems.forEach { item ->
+                                Text(
+                                    text = "med: ${item.medicineName} | qty: ${item.quantity} | inStock: ${item.inStock}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = OnMintContainer
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "• Supabase Table: affiliate_clicks (${affiliateClicks.size} clicks logged)",
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary
+                            )
+                            if (affiliateClicks.isEmpty()) {
+                                Text(
+                                    text = "No pharmacy affiliate clicks logged yet. Click 'Buy Now' on scanned results to test.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = OnMintContainer.copy(alpha = 0.7f)
+                                )
+                            } else {
+                                affiliateClicks.take(5).forEach { click ->
+                                    Text(
+                                        text = "user: ${click.userId.take(8)} | med: ${click.medicine} | pharmacy: ${click.pharmacy} | time: ${click.timestamp}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = OnMintContainer
+                                    )
+                                }
+                            }
                         }
                     }
                 }

@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.api.ScannedMedicationItem
+import com.example.data.pharmacy.PharmacyProvider
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.MedicineViewModel
 
@@ -354,10 +355,17 @@ fun ScanScreen(
 
                 // Render editable card for each extracted medication item
                 itemsIndexed(editableList, key = { index, item -> item.id }) { index, item ->
+                    val inInventory = viewModel.isMedicineInInventory(item.medicine)
+                    val context = androidx.compose.ui.platform.LocalContext.current
+
                     EditableMedicationCard(
                         index = index,
                         item = item,
                         canDelete = editableList.size > 1,
+                        isInInventory = inInventory,
+                        onBuyNow = { provider ->
+                            viewModel.buyMedicineFromPharmacy(context, item.medicine, provider)
+                        },
                         onUpdate = { updated -> viewModel.updateEditableItem(index, updated) },
                         onDelete = { viewModel.removeEditableItem(index) }
                     )
@@ -463,6 +471,8 @@ private fun EditableMedicationCard(
     index: Int,
     item: ScannedMedicationItem,
     canDelete: Boolean,
+    isInInventory: Boolean,
+    onBuyNow: (PharmacyProvider) -> Unit,
     onUpdate: (ScannedMedicationItem) -> Unit,
     onDelete: () -> Unit
 ) {
@@ -494,12 +504,68 @@ private fun EditableMedicationCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Medicine #${index + 1}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TealPrimary
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Medicine #${index + 1}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TealPrimary
+                    )
+
+                    // Inventory Badge
+                    if (isInInventory) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MintContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Inventory,
+                                    contentDescription = null,
+                                    tint = TealPrimary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "In Inventory",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TealPrimary
+                                )
+                            }
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFFFF3E0)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ShoppingBag,
+                                    contentDescription = null,
+                                    tint = Color(0xFFE65100),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "Not in Inventory",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFE65100)
+                                )
+                            }
+                        }
+                    }
+                }
 
                 if (canDelete) {
                     IconButton(onClick = onDelete) {
@@ -508,6 +574,83 @@ private fun EditableMedicationCard(
                             contentDescription = "Remove Item",
                             tint = MaterialTheme.colorScheme.error
                         )
+                    }
+                }
+            }
+
+            // Buy Now Affiliate Section if medicine is NOT in inventory
+            if (!isInInventory && medicineName.isNotBlank()) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFFFFF8E1),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFB300))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ShoppingCart,
+                                contentDescription = null,
+                                tint = Color(0xFFE65100),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Medicine missing from inventory! Buy now:",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE65100)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Button(
+                                onClick = { onBuyNow(PharmacyProvider.ONE_MG) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
+                                    .testTag("buy_1mg_btn_$index"),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6F00)),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("1mg", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+
+                            Button(
+                                onClick = { onBuyNow(PharmacyProvider.PHARMEASY) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
+                                    .testTag("buy_pharmeasy_btn_$index"),
+                                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("PharmEasy", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+
+                            Button(
+                                onClick = { onBuyNow(PharmacyProvider.NETMEDS) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(40.dp)
+                                    .testTag("buy_netmeds_btn_$index"),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0288D1)),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Netmeds", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
             }

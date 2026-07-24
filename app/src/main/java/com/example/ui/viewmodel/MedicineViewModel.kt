@@ -10,6 +10,8 @@ import com.example.data.api.ScanResult
 import com.example.data.api.ScannedMedicationItem
 import com.example.data.db.*
 import com.example.data.firebase.*
+import com.example.data.pharmacy.PharmacyAffiliateService
+import com.example.data.pharmacy.PharmacyProvider
 import com.example.data.repository.DoseScheduleGenerator
 import com.example.data.repository.MedicineRepository
 import com.example.notifications.NotificationScheduler
@@ -40,6 +42,28 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     val firebaseMedicines: StateFlow<List<MedicineFirebaseModel>> = firebaseSyncRepo.medicines
     val firebaseDoses: StateFlow<List<DoseFirebaseModel>> = firebaseSyncRepo.doses
     val firebaseReminders: StateFlow<List<ReminderFirebaseModel>> = firebaseSyncRepo.reminders
+
+    // Supabase Inventory & Affiliate Clicks State Flow
+    val userInventory = PharmacyAffiliateService.inventoryTable
+    val affiliateClicks = PharmacyAffiliateService.affiliateClicksTable
+
+    fun isMedicineInInventory(medicineName: String): Boolean {
+        return PharmacyAffiliateService.isMedicineInInventory(medicineName)
+    }
+
+    fun buyMedicineFromPharmacy(
+        context: android.content.Context,
+        medicineName: String,
+        provider: PharmacyProvider
+    ) {
+        PharmacyAffiliateService.launchPharmacyPurchase(
+            context = context,
+            medicineName = medicineName,
+            provider = provider,
+            userId = firebaseUser.value.id
+        )
+        _userMessage.value = "Opening ${provider.displayName} for $medicineName (Logged affiliate earnings tracking)"
+    }
 
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
