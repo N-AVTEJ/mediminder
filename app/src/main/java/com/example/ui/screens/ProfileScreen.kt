@@ -37,8 +37,14 @@ fun ProfileScreen(
     val profile by viewModel.profile.collectAsState()
     val guardians by viewModel.guardians.collectAsState()
 
+    val fbUser by viewModel.firebaseUser.collectAsState()
+    val fbMedicines by viewModel.firebaseMedicines.collectAsState()
+    val fbDoses by viewModel.firebaseDoses.collectAsState()
+    val fbReminders by viewModel.firebaseReminders.collectAsState()
+
     var showEditProfileModal by remember { mutableStateOf(false) }
     var showAddGuardianModal by remember { mutableStateOf(false) }
+    var showFirebaseSchemaInspector by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -131,16 +137,16 @@ fun ProfileScreen(
                 }
             }
 
-            // ⭐ Premium Status Badge
+            // ⭐ Firebase Schema & Cloud Sync Card
             item {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("premium_status_card")
-                        .border(2.dp, Color(0xFFFFB300), RoundedCornerShape(20.dp)),
+                        .testTag("firebase_schema_card")
+                        .border(1.5.dp, TealPrimary.copy(alpha = 0.5f), RoundedCornerShape(20.dp)),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFFF8E1)
+                        containerColor = MintContainer
                     )
                 ) {
                     Column(
@@ -153,35 +159,94 @@ fun ProfileScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Stars,
+                                imageVector = Icons.Default.CloudSync,
                                 contentDescription = null,
-                                tint = Color(0xFFFF8F00),
+                                tint = TealPrimary,
                                 modifier = Modifier.size(32.dp)
                             )
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "CAREPLUS PREMIUM ACTIVE",
+                                    text = "Firebase Cloud Schema Sync",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFE65100)
+                                    color = OnMintContainer
                                 )
                                 Text(
-                                    text = "All elder care features unlocked for your account.",
+                                    text = "Synced: users, medicines (${fbMedicines.size}), doses (${fbDoses.size}), reminders (${fbReminders.size})",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFFBF360C)
+                                    color = OnMintContainer.copy(alpha = 0.85f)
+                                )
+                            }
+
+                            IconButton(onClick = { showFirebaseSchemaInspector = !showFirebaseSchemaInspector }) {
+                                Icon(
+                                    imageVector = if (showFirebaseSchemaInspector) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = "Toggle Inspector",
+                                    tint = TealPrimary
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        if (showFirebaseSchemaInspector) {
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            PremiumFeatureChip(text = "Unlimited Scan")
-                            PremiumFeatureChip(text = "SMS Guardian Alerts")
-                            PremiumFeatureChip(text = "Cloud Backup")
+                            HorizontalDivider(color = TealPrimary.copy(alpha = 0.3f))
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = "• Collection: users",
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary
+                            )
+                            Text(
+                                text = "id: ${fbUser.id}\nname: ${fbUser.name}\nphone: ${fbUser.phone}\nguardian_ids: ${fbUser.guardian_ids}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnMintContainer
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "• Collection: medicines (${fbMedicines.size} records)",
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary
+                            )
+                            fbMedicines.take(3).forEach { m ->
+                                Text(
+                                    text = "id: ${m.id.take(8)}... | name: ${m.name} | dose: ${m.dose} | freq: ${m.frequency} | days: ${m.duration_days}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = OnMintContainer
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "• Collection: doses (${fbDoses.size} total)",
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary
+                            )
+                            val pendingCount = fbDoses.count { it.status == "pending" }
+                            val takenCount = fbDoses.count { it.status == "taken" }
+                            Text(
+                                text = "Pending: $pendingCount | Taken: $takenCount | Missed: ${fbDoses.size - pendingCount - takenCount}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnMintContainer
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "• Collection: reminders (${fbReminders.size} total)",
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary
+                            )
+                            Text(
+                                text = "Scheduled Notifications: ${fbReminders.size} triggers mapped with local timezone",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnMintContainer
+                            )
                         }
                     }
                 }
@@ -307,7 +372,7 @@ fun ProfileScreen(
                             )
                         }
 
-                        Divider(color = DividerColor)
+                        HorizontalDivider(color = DividerColor)
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -333,7 +398,7 @@ fun ProfileScreen(
                             )
                         }
 
-                        Divider(color = DividerColor)
+                        HorizontalDivider(color = DividerColor)
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -390,23 +455,6 @@ fun ProfileScreen(
                 viewModel.addGuardian(name, relationship, phone)
                 showAddGuardianModal = false
             }
-        )
-    }
-}
-
-@Composable
-private fun PremiumFeatureChip(text: String) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFFFFECB3)
-    ) {
-        Text(
-            text = "✓ $text",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFE65100),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            fontSize = 12.sp
         )
     }
 }

@@ -9,7 +9,10 @@ import com.example.data.api.PrescriptionScanner
 import com.example.data.api.ScanResult
 import com.example.data.api.ScannedMedicationItem
 import com.example.data.db.*
+import com.example.data.firebase.*
+import com.example.data.repository.DoseScheduleGenerator
 import com.example.data.repository.MedicineRepository
+import com.example.notifications.NotificationScheduler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -18,6 +21,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     private val db = AppDatabase.getDatabase(application)
     private val repository = MedicineRepository(db)
     private val prescriptionScanner = PrescriptionScanner(application)
+    private val firebaseSyncRepo = FirebaseSyncRepository.getInstance()
 
     val reminders: StateFlow<List<ReminderEntity>> = repository.allReminders
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -30,6 +34,12 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     val profile: StateFlow<ProfileEntity?> = repository.profile
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Firebase Collections State Flow
+    val firebaseUser: StateFlow<UserFirebaseModel> = firebaseSyncRepo.currentUser
+    val firebaseMedicines: StateFlow<List<MedicineFirebaseModel>> = firebaseSyncRepo.medicines
+    val firebaseDoses: StateFlow<List<DoseFirebaseModel>> = firebaseSyncRepo.doses
+    val firebaseReminders: StateFlow<List<ReminderFirebaseModel>> = firebaseSyncRepo.reminders
 
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
@@ -49,6 +59,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     init {
         viewModelScope.launch {
             repository.ensureDefaultDataSeeded()
+            NotificationScheduler.createNotificationChannel(application)
         }
     }
 
@@ -65,9 +76,17 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     fun markDoseStatus(logId: Int, status: String) {
         viewModelScope.launch {
             repository.updateDoseStatus(logId, status)
+
+            // Sync with Firebase
+            val logs = todayLogs.value
+            val target = logs.find { it.id == logId }
+            if (target != null) {
+                firebaseSyncRepo.markDoseTakenByMedicineAndSchedule(target.medicineName, target.scheduledTime)
+            }
+
             when (status) {
-                "TAKEN" -> _userMessage.value = "Great job! Dose logged as taken."
-                "MISSED" -> _userMessage.value = "Dose marked as missed. Guardian alerted."
+                "TAKEN" -> _userMessage.value = "Great job! Dose logged as taken and synced to Firebase."
+                "MISSED" -> _userMessage.value = "Dose marked as missed. Guardian alerted & updated in Firebase."
                 "SNOOZED" -> _userMessage.value = "Reminder snoozed for 15 minutes."
             }
         }
@@ -95,25 +114,38 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         shape: String = "Pill"
     ) {
         viewModelScope.launch {
-            val colorHex = when (timeCategory) {
-                "Morning" -> "#00796B"
-                "Afternoon" -> "#0288D1"
-                "Evening" -> "#E65100"
-                else -> "#6A1B9A"
-            }
-            repository.addReminder(
-                ReminderEntity(
-                    name = name,
-                    dosage = dosage,
-                    time = time,
-                    timeCategory = timeCategory,
-                    instructions = instructions,
-                    isActive = true,
-                    colorHex = colorHex,
-                    shape = shape
-                )
+            val schedule = DoseScheduleGenerator.generateSchedule(
+                medicineName = name,
+                dose = dosage,
+                frequency = timeCategory,
+                durationDays = 7,
+                instructions = instructions
             )
-            _userMessage.value = "Added $name to reminders"
+
+            // Save to Firebase
+            firebaseSyncRepo.addMedicineWithDosesAndReminders(
+                schedule.firebaseMedicine,
+                schedule.firebaseDoses,
+                schedule.firebaseReminders
+            )
+
+            // Save to Room DB
+            repository.addReminder(schedule.roomReminder)
+
+            // Schedule Local Notifications for doses
+            val context = getApplication<Application>()
+            schedule.notificationTriggers.forEach { trigger ->
+                NotificationScheduler.scheduleNotification(
+                    context = context,
+                    doseId = trigger.doseId,
+                    medicineName = trigger.medicineName,
+                    dose = trigger.dose,
+                    scheduledTimeStr = trigger.formattedTime,
+                    triggerTimeMillis = trigger.triggerTimeMillis
+                )
+            }
+
+            _userMessage.value = "Added $name to reminders & scheduled dose reminders"
         }
     }
 
@@ -179,6 +211,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * Requirement:
+     * After confirming scanned medicines, auto-generate dose schedule based on frequency
+     * (e.g. "twice daily" -> 8am, 8pm) for duration_days.
+     * Schedule local notifications at each dose time.
+     * Sync with Firebase schema.
+     */
     fun confirmAndSaveAllScannedMedications() {
         viewModelScope.launch {
             val itemsToSave = _editableScannedList.value.filter { it.medicine.isNotBlank() }
@@ -187,19 +226,46 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                 return@launch
             }
 
+            val context = getApplication<Application>()
+            var totalDosesScheduled = 0
+
             for (item in itemsToSave) {
-                addReminder(
-                    name = item.medicine,
-                    dosage = "${item.dose} (${item.frequency}, ${item.durationDays} days)",
-                    time = item.time,
-                    timeCategory = item.timeCategory,
-                    instructions = if (item.instructions.isNotBlank()) item.instructions else "Take as prescribed",
-                    shape = "Pill"
+                val schedule = DoseScheduleGenerator.generateSchedule(
+                    userId = firebaseUser.value.id,
+                    medicineName = item.medicine,
+                    dose = item.dose,
+                    frequency = item.frequency,
+                    durationDays = item.durationDays,
+                    instructions = if (item.instructions.isNotBlank()) item.instructions else "Take as prescribed"
                 )
+
+                // 1. Sync with Firebase Schema (medicines, doses, reminders)
+                firebaseSyncRepo.addMedicineWithDosesAndReminders(
+                    medicine = schedule.firebaseMedicine,
+                    newDoses = schedule.firebaseDoses,
+                    newReminders = schedule.firebaseReminders
+                )
+
+                // 2. Add to Room local DB
+                repository.addReminder(schedule.roomReminder)
+
+                // 3. Schedule Local Notifications for every dose time
+                schedule.notificationTriggers.forEach { trigger ->
+                    NotificationScheduler.scheduleNotification(
+                        context = context,
+                        doseId = trigger.doseId,
+                        medicineName = trigger.medicineName,
+                        dose = trigger.dose,
+                        scheduledTimeStr = trigger.formattedTime,
+                        triggerTimeMillis = trigger.triggerTimeMillis
+                    )
+                }
+
+                totalDosesScheduled += schedule.notificationTriggers.size
             }
 
             clearScanState()
-            _userMessage.value = "Successfully saved ${itemsToSave.size} medication reminder(s)!"
+            _userMessage.value = "Successfully generated dose schedule & scheduled $totalDosesScheduled notifications across Firebase!"
         }
     }
 
@@ -251,7 +317,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                     largeTextMode = largeTextMode
                 )
             )
-            _userMessage.value = "Profile updated successfully"
+            firebaseSyncRepo.updateFirebaseUser(name, phone, firebaseUser.value.guardian_ids)
+            _userMessage.value = "Profile updated and synced to Firebase"
         }
     }
 }
