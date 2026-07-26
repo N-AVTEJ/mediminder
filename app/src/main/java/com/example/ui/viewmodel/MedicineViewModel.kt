@@ -330,6 +330,22 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun registerUserOnSignup(uid: String, name: String, phone: String) {
+        viewModelScope.launch {
+            val user = firebaseSyncRepo.writeUserOnSignup(uid, name, phone)
+            repository.updateProfile(
+                ProfileEntity(
+                    id = 1,
+                    name = name,
+                    phone = phone,
+                    emergencyInfo = "Blood Type O+, Penicillin Allergy",
+                    largeTextMode = true
+                )
+            )
+            _userMessage.value = "New user account created & written to Firestore 'users' collection ({uid, name, phone, createdAt})."
+        }
+    }
+
     fun updateProfile(name: String, phone: String, emergencyInfo: String, largeTextMode: Boolean) {
         viewModelScope.launch {
             val current = profile.value ?: ProfileEntity(id = 1, name = name, phone = phone, emergencyInfo = emergencyInfo)

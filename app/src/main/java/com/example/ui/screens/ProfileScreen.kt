@@ -198,12 +198,12 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.height(12.dp))
 
                             Text(
-                                text = "• Collection: users",
+                                text = "• Collection: users ({uid, name, phone, createdAt})",
                                 fontWeight = FontWeight.Bold,
                                 color = TealPrimary
                             )
                             Text(
-                                text = "id: ${fbUser.id}\nname: ${fbUser.name}\nphone: ${fbUser.phone}\nguardian_ids: ${fbUser.guardian_ids}",
+                                text = "uid: ${fbUser.uid}\nname: ${fbUser.name}\nphone: ${fbUser.phone}\ncreatedAt: ${fbUser.createdAt}\nguardian_ids: ${fbUser.guardian_ids}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = OnMintContainer
                             )

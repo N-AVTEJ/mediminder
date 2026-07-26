@@ -15,9 +15,11 @@ import java.util.*
  */
 
 data class UserFirebaseModel(
+    val uid: String = "user_default_1",
     val id: String = "user_default_1",
     val name: String = "Eleanor Vance",
     val phone: String = "+1 (555) 234-5678",
+    val createdAt: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date()),
     val guardian_ids: List<String> = listOf("guardian_1", "guardian_2")
 )
 
@@ -77,6 +79,23 @@ class FirebaseSyncRepository private constructor() {
     fun updateFirebaseUser(name: String, phone: String, guardianIds: List<String>) {
         val updated = _currentUser.value.copy(name = name, phone = phone, guardian_ids = guardianIds)
         _currentUser.value = updated
+    }
+
+    /**
+     * Requirement: Write to Firestore "users" collection {uid, name, phone, createdAt} on signup
+     */
+    fun writeUserOnSignup(uid: String, name: String, phone: String): UserFirebaseModel {
+        val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        val newUser = UserFirebaseModel(
+            uid = uid,
+            id = uid,
+            name = name,
+            phone = phone,
+            createdAt = nowIso,
+            guardian_ids = emptyList()
+        )
+        _currentUser.value = newUser
+        return newUser
     }
 
     fun addMedicineWithDosesAndReminders(
