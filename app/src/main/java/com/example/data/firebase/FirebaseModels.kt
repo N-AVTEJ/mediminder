@@ -25,12 +25,15 @@ data class UserFirebaseModel(
 
 data class MedicineFirebaseModel(
     val id: String = UUID.randomUUID().toString(),
-    val user_id: String = "user_default_1",
+    val userId: String = "user_default_1",
     val name: String,
     val dose: String,
     val frequency: String,
-    val duration_days: Int,
-    val start_date: String // e.g. "2026-07-23" formatted using device locale
+    val durationDays: Int,
+    val startDate: String, // e.g. "2026-07-26" formatted using device locale
+    val user_id: String = userId,
+    val duration_days: Int = durationDays,
+    val start_date: String = startDate
 )
 
 data class DoseFirebaseModel(

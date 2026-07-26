@@ -211,13 +211,13 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "• Collection: medicines (${fbMedicines.size} records)",
+                                text = "• Collection: medicines ({id, userId, name, dose, frequency, durationDays, startDate}) - ${fbMedicines.size} records",
                                 fontWeight = FontWeight.Bold,
                                 color = TealPrimary
                             )
                             fbMedicines.take(3).forEach { m ->
                                 Text(
-                                    text = "id: ${m.id.take(8)}... | name: ${m.name} | dose: ${m.dose} | freq: ${m.frequency} | days: ${m.duration_days}",
+                                    text = "id: ${m.id.take(8)}... | userId: ${m.userId} | name: ${m.name} | dose: ${m.dose} | freq: ${m.frequency} | durationDays: ${m.durationDays} | startDate: ${m.startDate}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = OnMintContainer
                                 )

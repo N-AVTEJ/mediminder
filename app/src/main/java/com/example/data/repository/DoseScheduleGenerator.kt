@@ -85,12 +85,12 @@ object DoseScheduleGenerator {
 
         val firebaseMedicine = MedicineFirebaseModel(
             id = medicineId,
-            user_id = userId,
+            userId = userId,
             name = medicineName,
             dose = dose,
             frequency = frequency,
-            duration_days = durationDays,
-            start_date = startDateStr
+            durationDays = durationDays,
+            startDate = startDateStr
         )
 
         val firebaseDoses = mutableListOf<DoseFirebaseModel>()
