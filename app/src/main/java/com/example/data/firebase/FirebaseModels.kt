@@ -38,9 +38,11 @@ data class MedicineFirebaseModel(
 
 data class DoseFirebaseModel(
     val id: String = UUID.randomUUID().toString(),
-    val medicine_id: String,
-    val scheduled_time: String, // e.g. "2026-07-23T08:00:00" in device timezone
-    val status: String = "pending" // "pending", "taken", "missed"
+    val medicineId: String,
+    val scheduledTime: String, // e.g. "2026-07-26T08:00:00" in device timezone
+    val status: String = "pending", // "pending", "taken", "missed"
+    val medicine_id: String = medicineId,
+    val scheduled_time: String = scheduledTime
 )
 
 data class ReminderFirebaseModel(
@@ -141,8 +143,8 @@ class FirebaseSyncRepository private constructor() {
     fun markDoseTakenByMedicineAndSchedule(medicineName: String, scheduledTime: String) {
         val currentDoses = _doses.value.toMutableList()
         val index = currentDoses.indexOfFirst { dose ->
-            val med = _medicines.value.find { it.id == dose.medicine_id }
-            med?.name.equals(medicineName, ignoreCase = true) && dose.scheduled_time.contains(scheduledTime)
+            val med = _medicines.value.find { it.id == dose.medicineId }
+            med?.name.equals(medicineName, ignoreCase = true) && dose.scheduledTime.contains(scheduledTime)
         }
         if (index != -1) {
             currentDoses[index] = currentDoses[index].copy(status = "taken")

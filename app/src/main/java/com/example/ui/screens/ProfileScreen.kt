@@ -226,7 +226,7 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "• Collection: doses (${fbDoses.size} total)",
+                                text = "• Collection: doses ({id, medicineId, scheduledTime, status}) - ${fbDoses.size} total",
                                 fontWeight = FontWeight.Bold,
                                 color = TealPrimary
                             )

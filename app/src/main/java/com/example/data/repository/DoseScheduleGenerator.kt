@@ -136,8 +136,8 @@ object DoseScheduleGenerator {
                 // Firebase Dose
                 val doseFb = DoseFirebaseModel(
                     id = doseId,
-                    medicine_id = medicineId,
-                    scheduled_time = scheduledIsoStr,
+                    medicineId = medicineId,
+                    scheduledTime = scheduledIsoStr,
                     status = "pending"
                 )
                 firebaseDoses.add(doseFb)
