@@ -47,9 +47,11 @@ data class DoseFirebaseModel(
 
 data class ReminderFirebaseModel(
     val id: String = UUID.randomUUID().toString(),
-    val dose_id: String,
-    val notify_time: String, // e.g. "2026-07-23T08:00:00"
-    val sent: Boolean = false
+    val doseId: String,
+    val notifyTime: String, // e.g. "2026-07-26T08:00:00"
+    val sent: Boolean = false,
+    val dose_id: String = doseId,
+    val notify_time: String = notifyTime
 )
 
 /**
@@ -132,7 +134,7 @@ class FirebaseSyncRepository private constructor() {
 
             // Update associated reminder as sent if status is taken or missed
             val currentReminders = _reminders.value.toMutableList()
-            val remIndex = currentReminders.indexOfFirst { it.dose_id == doseId }
+            val remIndex = currentReminders.indexOfFirst { it.doseId == doseId || it.dose_id == doseId }
             if (remIndex != -1) {
                 currentReminders[remIndex] = currentReminders[remIndex].copy(sent = true)
                 _reminders.value = currentReminders

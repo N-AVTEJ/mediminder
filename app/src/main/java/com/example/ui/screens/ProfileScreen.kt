@@ -241,12 +241,13 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "• Collection: reminders (${fbReminders.size} total)",
+                                text = "• Collection: reminders ({id, doseId, notifyTime, sent}) - ${fbReminders.size} total",
                                 fontWeight = FontWeight.Bold,
                                 color = TealPrimary
                             )
+                            val sentCount = fbReminders.count { it.sent }
                             Text(
-                                text = "Scheduled Notifications: ${fbReminders.size} triggers mapped with local timezone",
+                                text = "Scheduled: ${fbReminders.size - sentCount} pending | Sent: $sentCount | Total Triggers: ${fbReminders.size}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = OnMintContainer
                             )
