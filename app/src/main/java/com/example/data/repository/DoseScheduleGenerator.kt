@@ -64,7 +64,7 @@ object DoseScheduleGenerator {
     }
 
     /**
-     * Auto-generates dose schedule for duration_days based on frequency using device locale timezone.
+     * Auto-generates dose schedule for duration_days based on frequency using device locale timezone and optional startDate.
      */
     fun generateSchedule(
         userId: String = "user_default_1",
@@ -72,11 +72,20 @@ object DoseScheduleGenerator {
         dose: String,
         frequency: String,
         durationDays: Int = 7,
+        startDate: String? = null,
         instructions: String = "Take as prescribed"
     ): GeneratedDoseSchedule {
         val zoneId = ZoneId.systemDefault()
-        val startDateLocal = LocalDate.now(zoneId)
         val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.getDefault())
+        val startDateLocal = try {
+            if (!startDate.isNullOrBlank()) {
+                LocalDate.parse(startDate.trim(), dateFormatter)
+            } else {
+                LocalDate.now(zoneId)
+            }
+        } catch (e: Exception) {
+            LocalDate.now(zoneId)
+        }
         val isoFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
         val startDateStr = startDateLocal.format(dateFormatter)
 

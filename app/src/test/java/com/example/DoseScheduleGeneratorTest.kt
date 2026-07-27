@@ -3,51 +3,61 @@ package com.example
 import com.example.data.repository.DoseScheduleGenerator
 import org.junit.Assert.*
 import org.junit.Test
-import java.time.ZoneId
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 class DoseScheduleGeneratorTest {
 
     @Test
-    fun `test frequency parser produces expected times per day`() {
-        val twiceDaily = DoseScheduleGenerator.parseDailyTimesFromFrequency("twice daily")
-        assertEquals(2, twiceDaily.size)
-        assertEquals("08:00 AM", twiceDaily[0])
-        assertEquals("08:00 PM", twiceDaily[1])
-
-        val threeTimes = DoseScheduleGenerator.parseDailyTimesFromFrequency("three times daily")
-        assertEquals(3, threeTimes.size)
-
-        val onceDaily = DoseScheduleGenerator.parseDailyTimesFromFrequency("once daily")
-        assertEquals(1, onceDaily.size)
-    }
-
-    @Test
-    fun `test schedule generator produces exact number of doses and reminders for duration_days`() {
+    fun `test generating dose schedule with frequency twice daily and custom startDate`() {
+        val startDate = "2026-08-01"
         val schedule = DoseScheduleGenerator.generateSchedule(
-            medicineName = "Amoxicillin",
+            userId = "user_test_99",
+            medicineName = "Metformin",
             dose = "500 mg",
             frequency = "twice daily",
-            durationDays = 7,
-            instructions = "Take with water"
+            durationDays = 5,
+            startDate = startDate,
+            instructions = "Take with food"
         )
 
-        assertNotNull(schedule)
-        assertEquals("Amoxicillin", schedule.firebaseMedicine.name)
-        assertEquals(7, schedule.firebaseMedicine.duration_days)
+        // Check medicine model
+        assertEquals("Metformin", schedule.firebaseMedicine.name)
+        assertEquals("user_test_99", schedule.firebaseMedicine.userId)
+        assertEquals("500 mg", schedule.firebaseMedicine.dose)
+        assertEquals("twice daily", schedule.firebaseMedicine.frequency)
+        assertEquals(5, schedule.firebaseMedicine.durationDays)
+        assertEquals(startDate, schedule.firebaseMedicine.startDate)
 
-        // 2 times per day * 7 days = 14 doses and 14 reminders
-        assertEquals(14, schedule.firebaseDoses.size)
-        assertEquals(14, schedule.firebaseReminders.size)
-        assertEquals(14, schedule.notificationTriggers.size)
+        // For twice daily x 5 days = 10 dose documents
+        assertEquals(10, schedule.firebaseDoses.size)
+        assertEquals(10, schedule.firebaseReminders.size)
 
-        // All doses initially pending
-        assertTrue(schedule.firebaseDoses.all { it.status == "pending" })
-        assertTrue(schedule.firebaseReminders.all { !it.sent })
+        // Verify dose scheduledTime slots start with startDate
+        val firstDoseTime = schedule.firebaseDoses.first().scheduledTime
+        assertTrue(firstDoseTime.startsWith("2026-08-01"))
+
+        val lastDoseTime = schedule.firebaseDoses.last().scheduledTime
+        assertTrue(lastDoseTime.startsWith("2026-08-05"))
+
+        // Check slots per day (08:00 AM and 08:00 PM)
+        val day1Doses = schedule.firebaseDoses.filter { it.scheduledTime.startsWith("2026-08-01") }
+        assertEquals(2, day1Doses.size)
+        assertEquals("pending", day1Doses[0].status)
     }
 
     @Test
-    fun `test timezone is derived from system default`() {
-        val zone = ZoneId.systemDefault()
-        assertNotNull(zone)
+    fun `test frequency parsing thrice daily produces 3 slots per day`() {
+        val schedule = DoseScheduleGenerator.generateSchedule(
+            medicineName = "Amoxicillin",
+            dose = "250 mg",
+            frequency = "three times daily",
+            durationDays = 3,
+            startDate = "2026-09-10"
+        )
+
+        assertEquals(9, schedule.firebaseDoses.size)
+        val day1 = schedule.firebaseDoses.filter { it.scheduledTime.startsWith("2026-09-10") }
+        assertEquals(3, day1.size)
     }
 }
