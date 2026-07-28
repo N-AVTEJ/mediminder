@@ -14,6 +14,7 @@ import com.example.data.pharmacy.PharmacyAffiliateService
 import com.example.data.pharmacy.PharmacyProvider
 import com.example.data.repository.DoseScheduleGenerator
 import com.example.data.repository.MedicineRepository
+import com.example.notifications.FcmTokenManager
 import com.example.notifications.NotificationScheduler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -84,6 +85,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             repository.ensureDefaultDataSeeded()
             NotificationScheduler.createNotificationChannel(application)
+            FcmTokenManager.registerDeviceFcmToken()
         }
     }
 
@@ -330,9 +332,10 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun registerUserOnSignup(uid: String, name: String, phone: String) {
+    fun registerUserOnSignup(uid: String, name: String, phone: String, customFcmToken: String? = null) {
         viewModelScope.launch {
-            val user = firebaseSyncRepo.writeUserOnSignup(uid, name, phone)
+            val token = FcmTokenManager.registerDeviceFcmToken(customFcmToken)
+            val user = firebaseSyncRepo.writeUserOnSignup(uid, name, phone, fcmToken = token)
             repository.updateProfile(
                 ProfileEntity(
                     id = 1,
@@ -342,8 +345,13 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                     largeTextMode = true
                 )
             )
-            _userMessage.value = "New user account created & written to Firestore 'users' collection ({uid, name, phone, createdAt})."
+            _userMessage.value = "New user account created & FCM token registered in Firestore 'users' collection."
         }
+    }
+
+    fun registerDeviceFcmToken(customToken: String? = null) {
+        val token = FcmTokenManager.registerDeviceFcmToken(customToken)
+        _userMessage.value = "FCM token ($token) registered & saved to user doc"
     }
 
     fun updateProfile(name: String, phone: String, emergencyInfo: String, largeTextMode: Boolean) {

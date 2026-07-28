@@ -37,6 +37,18 @@
                 <action android:name="com.example.action.MARK_DOSE_TAKEN" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name=".notifications.AppFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="dose_reminders_channel" />
     </application>
 
 </manifest>

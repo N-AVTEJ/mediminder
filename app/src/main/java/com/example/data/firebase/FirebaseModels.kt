@@ -20,7 +20,9 @@ data class UserFirebaseModel(
     val name: String = "Eleanor Vance",
     val phone: String = "+1 (555) 234-5678",
     val createdAt: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date()),
-    val guardian_ids: List<String> = listOf("guardian_1", "guardian_2")
+    val guardian_ids: List<String> = listOf("guardian_1", "guardian_2"),
+    val fcmToken: String = "",
+    val fcm_token: String = fcmToken
 )
 
 data class MedicineFirebaseModel(
@@ -90,18 +92,30 @@ class FirebaseSyncRepository private constructor() {
         _currentUser.value = updated
     }
 
+    fun registerFcmToken(fcmToken: String) {
+        val current = _currentUser.value
+        val updated = current.copy(
+            fcmToken = fcmToken,
+            fcm_token = fcmToken
+        )
+        _currentUser.value = updated
+    }
+
     /**
-     * Requirement: Write to Firestore "users" collection {uid, name, phone, createdAt} on signup
+     * Requirement: Write to Firestore "users" collection {uid, name, phone, createdAt, fcmToken} on signup
      */
-    fun writeUserOnSignup(uid: String, name: String, phone: String): UserFirebaseModel {
+    fun writeUserOnSignup(uid: String, name: String, phone: String, fcmToken: String = ""): UserFirebaseModel {
         val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        val existingToken = if (fcmToken.isNotBlank()) fcmToken else _currentUser.value.fcmToken
         val newUser = UserFirebaseModel(
             uid = uid,
             id = uid,
             name = name,
             phone = phone,
             createdAt = nowIso,
-            guardian_ids = emptyList()
+            guardian_ids = emptyList(),
+            fcmToken = existingToken,
+            fcm_token = existingToken
         )
         _currentUser.value = newUser
         return newUser
