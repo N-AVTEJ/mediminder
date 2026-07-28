@@ -50,8 +50,10 @@ data class ReminderFirebaseModel(
     val doseId: String,
     val notifyTime: String, // e.g. "2026-07-26T08:00:00"
     val sent: Boolean = false,
+    val notificationId: String = "notif_$doseId",
     val dose_id: String = doseId,
-    val notify_time: String = notifyTime
+    val notify_time: String = notifyTime,
+    val notification_id: String = notificationId
 )
 
 /**

@@ -152,11 +152,16 @@ object DoseScheduleGenerator {
                 firebaseDoses.add(doseFb)
 
                 // Firebase Reminder
+                val notifId = "notif_$doseId"
                 val reminderFb = ReminderFirebaseModel(
                     id = reminderId,
                     doseId = doseId,
                     notifyTime = scheduledIsoStr,
-                    sent = false
+                    sent = false,
+                    notificationId = notifId,
+                    dose_id = doseId,
+                    notify_time = scheduledIsoStr,
+                    notification_id = notifId
                 )
                 firebaseReminders.add(reminderFb)
 

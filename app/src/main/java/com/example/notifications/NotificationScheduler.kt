@@ -40,7 +40,8 @@ object NotificationScheduler {
         dose: String,
         scheduledTimeStr: String,
         triggerTimeMillis: Long
-    ) {
+    ): String {
+        val notificationId = "notif_$doseId"
         try {
             createNotificationChannel(context)
 
@@ -77,10 +78,11 @@ object NotificationScheduler {
                     pendingIntent
                 )
             }
-            Log.d("NotificationScheduler", "Scheduled notification for $medicineName at $effectiveTrigger")
+            Log.d("NotificationScheduler", "Scheduled notification $notificationId for $medicineName at $effectiveTrigger")
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        return notificationId
     }
 
     fun cancelNotification(context: Context, doseId: String) {
