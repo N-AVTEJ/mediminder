@@ -107,7 +107,10 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             val logs = todayLogs.value
             val target = logs.find { it.id == logId }
             if (target != null) {
-                firebaseSyncRepo.markDoseTakenByMedicineAndSchedule(target.medicineName, target.scheduledTime)
+                val doseId = firebaseSyncRepo.markDoseTakenByMedicineAndSchedule(target.medicineName, target.scheduledTime)
+                if (doseId != null && status == "TAKEN") {
+                    NotificationScheduler.cancelNotification(getApplication(), doseId)
+                }
             }
 
             when (status) {

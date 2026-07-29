@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import com.example.data.firebase.FirebaseSyncRepository
 import com.example.notifications.DoseNotificationReceiver
 import com.example.notifications.NotificationScheduler
 import com.example.ui.components.MainAppContainer
@@ -81,10 +82,16 @@ class MainActivity : ComponentActivity() {
                 medicineViewModel.firebaseMedicines.value
                 // Find matching log in today's logs and mark taken
                 val logs = medicineViewModel.todayLogs.value
-                val matchedLog = logs.find { it.medicineName.equals(medicineName, ignoreCase = true) }
+                val matchedLog = logs.find { it.medicineName.equals(medicineName, ignoreCase = true) && it.scheduledTime == scheduledTime }
+                    ?: logs.find { it.medicineName.equals(medicineName, ignoreCase = true) && it.status == "PENDING" }
                 if (matchedLog != null) {
                     medicineViewModel.markDoseStatus(matchedLog.id, "TAKEN")
                 } else {
+                    // Fallback if log not found locally
+                    val repo = FirebaseSyncRepository.getInstance()
+                    if (doseId.isNotBlank()) repo.updateDoseStatusInFirebase(doseId, "taken")
+                    repo.markDoseTakenByMedicineAndSchedule(medicineName, scheduledTime)
+                    NotificationScheduler.cancelNotification(this, doseId)
                     Toast.makeText(this, "Marked $medicineName dose as TAKEN!", Toast.LENGTH_SHORT).show()
                 }
             }

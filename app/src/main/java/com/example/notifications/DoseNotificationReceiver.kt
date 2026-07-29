@@ -13,6 +13,7 @@ import com.example.data.firebase.FirebaseSyncRepository
 import com.example.data.repository.MedicineRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 class DoseNotificationReceiver : BroadcastReceiver() {
@@ -104,6 +105,7 @@ class DoseNotificationReceiver : BroadcastReceiver() {
         // Cancel notification banner
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(doseId.hashCode())
+        NotificationScheduler.cancelNotification(context, doseId) // Cancel any pending escalation
 
         // 1. Update Firebase
         val firebaseRepo = FirebaseSyncRepository.getInstance()
@@ -118,13 +120,15 @@ class DoseNotificationReceiver : BroadcastReceiver() {
                 val db = AppDatabase.getDatabase(context)
                 val repo = MedicineRepository(db)
                 val todayStr = repo.getTodayDateStr()
-                val todayLogs = db.doseLogDao().getLogsForDate(todayStr)
+                val todayLogs = db.doseLogDao().getLogsForDate(todayStr).firstOrNull() ?: emptyList()
 
-                // Match log by medicine name or mark first pending log for this medicine
-                val logs = db.doseLogDao()
-                // Update log
-                val nowTime = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date())
-                val todayLogsList = db.doseLogDao()
+                // Match log by medicine name and time, or mark first pending log for this medicine
+                val targetLog = todayLogs.find { it.medicineName == medicineName && it.scheduledTime == scheduledTime }
+                    ?: todayLogs.find { it.medicineName == medicineName && it.status == "PENDING" }
+
+                if (targetLog != null) {
+                    repo.updateDoseStatus(targetLog.id, "TAKEN")
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
