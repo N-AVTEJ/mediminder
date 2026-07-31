@@ -79,6 +79,37 @@ object NotificationScheduler {
                 )
             }
             Log.d("NotificationScheduler", "Scheduled notification $notificationId for $medicineName at $effectiveTrigger")
+
+            // Schedule missed dose check (e.g., 2 hours after scheduled time)
+            val gracePeriodMillis = 2 * 60 * 60 * 1000L // 2 hours
+            val missedIntent = Intent(context, DoseNotificationReceiver::class.java).apply {
+                action = DoseNotificationReceiver.ACTION_CHECK_MISSED
+                putExtra(EXTRA_DOSE_ID, doseId)
+                putExtra(EXTRA_MEDICINE_NAME, medicineName)
+                putExtra(EXTRA_SCHEDULED_TIME, scheduledTimeStr)
+            }
+            val missedPendingIntent = PendingIntent.getBroadcast(
+                context,
+                doseId.hashCode() + 2,
+                missedIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val missedTrigger = effectiveTrigger + gracePeriodMillis
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    missedTrigger,
+                    missedPendingIntent
+                )
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    missedTrigger,
+                    missedPendingIntent
+                )
+            }
+            Log.d("NotificationScheduler", "Scheduled missed check for $notificationId at $missedTrigger")
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -95,10 +126,25 @@ object NotificationScheduler {
                 intent,
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             )
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             if (pendingIntent != null) {
-                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
                 alarmManager.cancel(pendingIntent)
                 pendingIntent.cancel()
+            }
+            
+            // Also cancel the missed check alarm
+            val missedIntent = Intent(context, DoseNotificationReceiver::class.java).apply {
+                action = DoseNotificationReceiver.ACTION_CHECK_MISSED
+            }
+            val missedPendingIntent = PendingIntent.getBroadcast(
+                context,
+                doseId.hashCode() + 2,
+                missedIntent,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (missedPendingIntent != null) {
+                alarmManager.cancel(missedPendingIntent)
+                missedPendingIntent.cancel()
             }
         } catch (e: Exception) {
             e.printStackTrace()

@@ -158,15 +158,19 @@ class FirebaseSyncRepository private constructor() {
         }
     }
 
-    fun markDoseTakenByMedicineAndSchedule(medicineName: String, scheduledTime: String): String? {
+    fun markDoseStatusByMedicineAndSchedule(medicineName: String, scheduledTime: String, status: String): String? {
         val dose = _doses.value.find { d ->
             val med = _medicines.value.find { it.id == d.medicineId }
             med?.name.equals(medicineName, ignoreCase = true) && d.scheduledTime.contains(scheduledTime)
         }
         if (dose != null) {
-            updateDoseStatusInFirebase(dose.id, "taken")
+            updateDoseStatusInFirebase(dose.id, status)
             return dose.id
         }
         return null
+    }
+
+    fun markDoseTakenByMedicineAndSchedule(medicineName: String, scheduledTime: String): String? {
+        return markDoseStatusByMedicineAndSchedule(medicineName, scheduledTime, "taken")
     }
 }

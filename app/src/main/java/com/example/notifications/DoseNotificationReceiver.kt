@@ -21,6 +21,7 @@ class DoseNotificationReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_SHOW_NOTIFICATION = "com.example.action.SHOW_DOSE_NOTIFICATION"
         const val ACTION_MARK_TAKEN = "com.example.action.MARK_DOSE_TAKEN"
+        const val ACTION_CHECK_MISSED = "com.example.action.CHECK_MISSED_DOSE"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -36,6 +37,9 @@ class DoseNotificationReceiver : BroadcastReceiver() {
             }
             ACTION_MARK_TAKEN -> {
                 markDoseTaken(context, doseId, medicineName, scheduledTime)
+            }
+            ACTION_CHECK_MISSED -> {
+                checkMissedDose(context, doseId, medicineName, scheduledTime)
             }
         }
     }
@@ -135,5 +139,40 @@ class DoseNotificationReceiver : BroadcastReceiver() {
         }
 
         Toast.makeText(context, "Dose marked as TAKEN! Synced with Firebase.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun checkMissedDose(
+        context: Context,
+        doseId: String,
+        medicineName: String,
+        scheduledTime: String
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = AppDatabase.getDatabase(context)
+                val repo = MedicineRepository(db)
+                val todayStr = repo.getTodayDateStr()
+                val todayLogs = db.doseLogDao().getLogsForDate(todayStr).firstOrNull() ?: emptyList()
+
+                // Find log by doseId (if it's not a generic ID) or by medicine/time
+                val targetLog = todayLogs.find { it.medicineName == medicineName && it.scheduledTime == scheduledTime }
+                    ?: todayLogs.find { it.medicineName == medicineName && it.status == "PENDING" }
+
+                if (targetLog != null && targetLog.status == "PENDING") {
+                    // It's still pending, mark as missed!
+                    repo.updateDoseStatus(targetLog.id, "MISSED")
+                    
+                    // Update firebase
+                    val firebaseRepo = FirebaseSyncRepository.getInstance()
+                    if (doseId.isNotBlank()) {
+                        firebaseRepo.updateDoseStatusInFirebase(doseId, "missed")
+                    }
+                    // Generic update for Firebase doses
+                    firebaseRepo.markDoseStatusByMedicineAndSchedule(medicineName, scheduledTime, "missed")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 }
