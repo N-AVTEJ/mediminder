@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import com.example.utils.TimeUtils
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.data.db.AppDatabase
@@ -85,7 +86,7 @@ class DoseNotificationReceiver : BroadcastReceiver() {
         val notification = NotificationCompat.Builder(context, NotificationScheduler.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("Time to take $medicineName")
-            .setContentText("Dose: $dose ($scheduledTime). Tap to mark as taken.")
+            .setContentText("Dose: $dose (${TimeUtils.fromUtcIsoStringToLocal12Hour(scheduledTime)}). Tap to mark as taken.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)

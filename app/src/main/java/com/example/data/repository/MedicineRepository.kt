@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.example.utils.TimeUtils
 
 class MedicineRepository(
     private val db: AppDatabase
@@ -112,7 +113,7 @@ class MedicineRepository(
                         medicineName = "Lisinopril",
                         dosage = "10 mg Tablet",
                         dateStr = todayStr,
-                        scheduledTime = "08:00 AM",
+                        scheduledTime = TimeUtils.local12HourToTodayUtcIso("08:00 AM"),
                         status = "TAKEN",
                         takenTime = "08:05 AM"
                     ),
@@ -121,7 +122,7 @@ class MedicineRepository(
                         medicineName = "Metformin",
                         dosage = "500 mg Tablet",
                         dateStr = todayStr,
-                        scheduledTime = "01:00 PM",
+                        scheduledTime = TimeUtils.local12HourToTodayUtcIso("01:00 PM"),
                         status = "PENDING"
                     ),
                     DoseLogEntity(
@@ -129,7 +130,7 @@ class MedicineRepository(
                         medicineName = "Atorvastatin",
                         dosage = "20 mg Capsule",
                         dateStr = todayStr,
-                        scheduledTime = "08:00 PM",
+                        scheduledTime = TimeUtils.local12HourToTodayUtcIso("08:00 PM"),
                         status = "MISSED" // Highlighted RED on Home screen!
                     )
                 )
@@ -151,7 +152,7 @@ class MedicineRepository(
                         medicineName = med.name,
                         dosage = med.dosage,
                         dateStr = todayStr,
-                        scheduledTime = med.time,
+                        scheduledTime = TimeUtils.local12HourToTodayUtcIso(med.time),
                         status = initialStatus,
                         takenTime = if (initialStatus == "TAKEN") "08:05 AM" else null
                     )
@@ -172,7 +173,7 @@ class MedicineRepository(
                 medicineName = reminder.name,
                 dosage = reminder.dosage,
                 dateStr = todayStr,
-                scheduledTime = reminder.time,
+                scheduledTime = TimeUtils.local12HourToTodayUtcIso(reminder.time),
                 status = "PENDING"
             )
         )

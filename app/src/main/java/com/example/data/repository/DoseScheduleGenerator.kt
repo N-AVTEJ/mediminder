@@ -139,7 +139,8 @@ object DoseScheduleGenerator {
 
                 val localTime = parse12HourTime(timeStr)
                 val zonedDateTime = ZonedDateTime.of(currentDate, localTime, zoneId)
-                val scheduledIsoStr = zonedDateTime.format(isoFormatter)
+                val utcZonedDateTime = zonedDateTime.withZoneSameInstant(ZoneId.of("UTC"))
+                val scheduledIsoStr = utcZonedDateTime.format(isoFormatter)
                 val triggerMillis = zonedDateTime.toInstant().toEpochMilli()
 
                 // Firebase Dose
@@ -171,7 +172,7 @@ object DoseScheduleGenerator {
                     medicineName = medicineName,
                     dosage = dose,
                     dateStr = dateStr,
-                    scheduledTime = timeStr,
+                    scheduledTime = scheduledIsoStr,
                     status = "PENDING"
                 )
                 roomDoseLogs.add(roomLog)
@@ -183,7 +184,7 @@ object DoseScheduleGenerator {
                         medicineName = medicineName,
                         dose = dose,
                         triggerTimeMillis = triggerMillis,
-                        formattedTime = timeStr,
+                        formattedTime = scheduledIsoStr,
                         dateStr = dateStr
                     )
                 )

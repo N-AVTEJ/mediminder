@@ -34,6 +34,41 @@ fun RemindersScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var editingReminderForTime by remember { mutableStateOf<ReminderEntity?>(null) }
 
+    val fbMedicines by viewModel.firebaseMedicines.collectAsState()
+    val firestoreDoses = remember { mutableStateOf<List<com.example.data.firebase.DoseFirebaseModel>>(emptyList()) }
+    
+    DisposableEffect(Unit) {
+        var listener: com.google.firebase.firestore.ListenerRegistration? = null
+        try {
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            listener = db.collection("doses").addSnapshotListener { snapshot, e ->
+                if (e != null) return@addSnapshotListener
+                if (snapshot != null) {
+                    firestoreDoses.value = snapshot.toObjects(com.example.data.firebase.DoseFirebaseModel::class.java)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        onDispose {
+            listener?.remove()
+        }
+    }
+
+    val todayLocalStr = remember { java.time.LocalDate.now().toString() }
+    
+    val groupedLiveDoses = remember(firestoreDoses.value) {
+        firestoreDoses.value.filter { dose ->
+            try {
+                val zdt = java.time.ZonedDateTime.parse(dose.scheduledTime, java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                val localZdt = zdt.withZoneSameInstant(java.time.ZoneId.systemDefault())
+                localZdt.toLocalDate().toString() == todayLocalStr
+            } catch(e: Exception) {
+                false
+            }
+        }.groupBy { it.status.lowercase() }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -124,6 +159,76 @@ fun RemindersScreen(
                         }
                     }
                 }
+            }
+
+            item {
+                Text(
+                    text = "Today's Live Doses (Firestore)",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+            
+            val statuses = listOf("pending", "taken", "missed")
+            statuses.forEach { status ->
+                val dosesForStatus = groupedLiveDoses[status] ?: emptyList()
+                if (dosesForStatus.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = status.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = when (status) {
+                                "taken" -> TealPrimary
+                                "missed" -> MissedRed
+                                else -> MaterialTheme.colorScheme.onSurface
+                            },
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    items(dosesForStatus) { dose ->
+                        val med = fbMedicines.find { it.id == dose.medicineId }
+                        val localTimeStr = com.example.utils.TimeUtils.fromUtcIsoStringToLocal12Hour(dose.scheduledTime)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(text = med?.name ?: "Unknown", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text(text = "Scheduled: $localTimeStr", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Icon(
+                                    imageVector = when(status) {
+                                        "taken" -> Icons.Default.CheckCircle
+                                        "missed" -> Icons.Default.Cancel
+                                        else -> Icons.Default.Schedule
+                                    },
+                                    contentDescription = status,
+                                    tint = when(status) {
+                                        "taken" -> TealPrimary
+                                        "missed" -> MissedRed
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
             if (reminders.isEmpty()) {

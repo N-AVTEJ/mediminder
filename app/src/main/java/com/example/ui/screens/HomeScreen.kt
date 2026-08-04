@@ -27,6 +27,7 @@ import com.example.data.db.DoseLogEntity
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.MedicineViewModel
 import java.text.SimpleDateFormat
+import com.example.utils.TimeUtils
 import java.util.Date
 import java.util.Locale
 
@@ -53,8 +54,9 @@ fun HomeScreen(
     val filteredLogs = remember(logs, selectedCategoryFilter) {
         if (selectedCategoryFilter == "All") logs
         else logs.filter { log ->
-            val hour = log.scheduledTime.take(2).toIntOrNull() ?: 12
-            val isPm = log.scheduledTime.contains("PM", ignoreCase = true)
+            val localTimeStr = TimeUtils.fromUtcIsoStringToLocal12Hour(log.scheduledTime)
+            val hour = localTimeStr.take(2).toIntOrNull() ?: 12
+            val isPm = localTimeStr.contains("PM", ignoreCase = true)
             val militaryHour = if (isPm && hour < 12) hour + 12 else if (!isPm && hour == 12) 0 else hour
             when (selectedCategoryFilter) {
                 "Morning" -> militaryHour in 5..11
@@ -417,7 +419,7 @@ fun DoseScheduleCard(
                 }
 
                 Text(
-                    text = log.scheduledTime,
+                    text = TimeUtils.fromUtcIsoStringToLocal12Hour(log.scheduledTime),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (isMissed) MissedRed else MaterialTheme.colorScheme.onSurface
