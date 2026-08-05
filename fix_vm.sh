@@ -1,0 +1,2 @@
+sed -i '180,183d' app/src/main/java/com/example/ui/viewmodel/MedicineViewModel.kt
+sed -i '/\/\/ Save to Firebase/a \            updateInventoryInFirestore(name, 14)\n            firebaseSyncRepo.addMedicineWithDosesAndReminders(\n                schedule.firebaseMedicine,\n                schedule.firebaseDoses,\n                schedule.firebaseReminders\n            )' app/src/main/java/com/example/ui/viewmodel/MedicineViewModel.kt

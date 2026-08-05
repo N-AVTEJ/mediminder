@@ -93,6 +93,31 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         _userMessage.value = null
     }
 
+    fun updateInventoryInFirestore(medicineName: String, quantity: Int) {
+        try {
+            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val userId = firebaseUser.value.id
+            val inventoryRef = db.collection("inventory").document("${userId}_${medicineName.replace(" ", "_")}")
+            val nowIso = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(java.util.Date())
+            val data = hashMapOf(
+                "userId" to userId,
+                "medicineName" to medicineName,
+                "quantity" to quantity,
+                "lastUpdated" to nowIso
+            )
+            inventoryRef.set(data)
+                .addOnSuccessListener { 
+                    _userMessage.value = "Inventory updated in Firestore for $medicineName"
+                    firebaseSyncRepo.updateInventory(medicineName, quantity)
+                }
+                .addOnFailureListener { e ->
+                    _userMessage.value = "Failed to update inventory in Firestore: ${e.message}"
+                }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun clearScanState() {
         _scanResult.value = null
         _scanError.value = null
@@ -152,7 +177,8 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                 instructions = instructions
             )
 
-            // Save to Firebase
+            updateInventoryInFirestore(name, 14)
+
             firebaseSyncRepo.addMedicineWithDosesAndReminders(
                 schedule.firebaseMedicine,
                 schedule.firebaseDoses,
@@ -269,7 +295,9 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                     instructions = if (item.instructions.isNotBlank()) item.instructions else "Take as prescribed"
                 )
 
-                // 1. Sync with Firebase Schema (medicines, doses, reminders)
+
+                updateInventoryInFirestore(item.medicine, item.durationDays * 2)
+
                 firebaseSyncRepo.addMedicineWithDosesAndReminders(
                     medicine = schedule.firebaseMedicine,
                     newDoses = schedule.firebaseDoses,

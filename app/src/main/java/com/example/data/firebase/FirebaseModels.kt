@@ -47,6 +47,18 @@ data class DoseFirebaseModel(
     val scheduled_time: String = scheduledTime
 )
 
+data class InventoryFirebaseModel(
+    val id: String = UUID.randomUUID().toString(),
+    val userId: String = "user_default_1",
+    val medicineName: String = "",
+    val quantity: Int = 0,
+    val lastUpdated: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date()),
+    val user_id: String = userId,
+    val medicine_name: String = medicineName,
+    val last_updated: String = lastUpdated
+)
+
+
 data class ReminderFirebaseModel(
     val id: String = UUID.randomUUID().toString(),
     val doseId: String,
@@ -86,6 +98,21 @@ class FirebaseSyncRepository private constructor() {
 
     private val _reminders = MutableStateFlow<List<ReminderFirebaseModel>>(emptyList())
     val reminders: StateFlow<List<ReminderFirebaseModel>> = _reminders.asStateFlow()
+    private val _inventory = MutableStateFlow<List<InventoryFirebaseModel>>(emptyList())
+    val inventory: StateFlow<List<InventoryFirebaseModel>> = _inventory.asStateFlow()
+
+    fun updateInventory(medicineName: String, quantity: Int) {
+        val currentInventory = _inventory.value.toMutableList()
+        val index = currentInventory.indexOfFirst { it.medicineName.equals(medicineName, ignoreCase = true) || it.medicine_name.equals(medicineName, ignoreCase = true) }
+        val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        if (index != -1) {
+            val updated = currentInventory[index].copy(quantity = quantity, lastUpdated = nowIso, last_updated = nowIso)
+            currentInventory[index] = updated
+        } else {
+            currentInventory.add(InventoryFirebaseModel(medicineName = medicineName, medicine_name = medicineName, quantity = quantity, lastUpdated = nowIso, last_updated = nowIso))
+        }
+        _inventory.value = currentInventory
+    }
 
     fun updateFirebaseUser(name: String, phone: String, guardianIds: List<String>) {
         val updated = _currentUser.value.copy(name = name, phone = phone, guardian_ids = guardianIds)
