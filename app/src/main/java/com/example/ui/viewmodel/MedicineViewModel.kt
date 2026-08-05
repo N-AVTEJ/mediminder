@@ -49,7 +49,12 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     val affiliateClicks = PharmacyAffiliateService.affiliateClicksTable
 
     fun isMedicineInInventory(medicineName: String): Boolean {
-        return PharmacyAffiliateService.isMedicineInInventory(medicineName)
+        if (medicineName.isBlank()) return true
+        val cleanName = medicineName.trim().lowercase(java.util.Locale.ROOT)
+        return firebaseSyncRepo.inventory.value.any {
+            it.quantity > 0 && (it.medicineName.trim().lowercase(java.util.Locale.ROOT).contains(cleanName) ||
+                    cleanName.contains(it.medicineName.trim().lowercase(java.util.Locale.ROOT)))
+        }
     }
 
     fun buyMedicineFromPharmacy(
@@ -177,7 +182,6 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                 instructions = instructions
             )
 
-            updateInventoryInFirestore(name, 14)
 
             firebaseSyncRepo.addMedicineWithDosesAndReminders(
                 schedule.firebaseMedicine,
@@ -296,7 +300,6 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                 )
 
 
-                updateInventoryInFirestore(item.medicine, item.durationDays * 2)
 
                 firebaseSyncRepo.addMedicineWithDosesAndReminders(
                     medicine = schedule.firebaseMedicine,
@@ -323,7 +326,9 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             }
 
             clearScanState()
-            _userMessage.value = "Successfully generated dose schedule & scheduled $totalDosesScheduled notifications across Firebase!"
+            val missingMeds = itemsToSave.filter { !isMedicineInInventory(it.medicine) }.map { it.medicine }
+            val missingText = if (missingMeds.isNotEmpty()) "\nWarning: Missing from inventory: ${missingMeds.joinToString()}" else ""
+            _userMessage.value = "Successfully generated dose schedule & scheduled $totalDosesScheduled notifications.$missingText"
         }
     }
 
