@@ -41,7 +41,7 @@ object FcmTokenManager {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "FirebaseMessaging error, falling back to local device token", e)
+            Log.w(TAG, "FirebaseMessaging not initialized, falling back to local device token: ${e.message}")
             repo.registerFcmToken(fallbackToken)
             onTokenRetrieved?.invoke(fallbackToken)
         }

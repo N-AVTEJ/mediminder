@@ -1,0 +1,1 @@
+sed -i 's/Log.e(TAG, "FirebaseMessaging error, falling back to local device token", e)/Log.w(TAG, "FirebaseMessaging not initialized, falling back to local device token: ${e.message}")/' app/src/main/java/com/example/notifications/FcmTokenManager.kt
