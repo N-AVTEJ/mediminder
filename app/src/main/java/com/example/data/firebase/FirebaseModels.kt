@@ -47,6 +47,16 @@ data class DoseFirebaseModel(
     val scheduled_time: String = scheduledTime
 )
 
+data class AffiliateClickFirebaseModel(
+    val id: String = UUID.randomUUID().toString(),
+    val userId: String,
+    val medicine: String,
+    val pharmacy: String,
+    val timestamp: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date()),
+    val user_id: String = userId
+)
+
+
 data class InventoryFirebaseModel(
     val id: String = UUID.randomUUID().toString(),
     val userId: String = "user_default_1",
@@ -95,6 +105,18 @@ class FirebaseSyncRepository private constructor() {
 
     private val _doses = MutableStateFlow<List<DoseFirebaseModel>>(emptyList())
     val doses: StateFlow<List<DoseFirebaseModel>> = _doses.asStateFlow()
+
+    private val _affiliateClicks = MutableStateFlow<List<AffiliateClickFirebaseModel>>(emptyList())
+    val affiliateClicks: StateFlow<List<AffiliateClickFirebaseModel>> = _affiliateClicks.asStateFlow()
+
+    fun logAffiliateClick(userId: String, medicine: String, pharmacy: String) {
+        val click = AffiliateClickFirebaseModel(userId = userId, medicine = medicine, pharmacy = pharmacy)
+        val current = _affiliateClicks.value.toMutableList()
+        current.add(click)
+        _affiliateClicks.value = current
+    }
+
+
 
     private val _reminders = MutableStateFlow<List<ReminderFirebaseModel>>(emptyList())
     val reminders: StateFlow<List<ReminderFirebaseModel>> = _reminders.asStateFlow()

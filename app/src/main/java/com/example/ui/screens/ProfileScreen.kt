@@ -272,7 +272,7 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "• Supabase Table: affiliate_clicks (${affiliateClicks.size} clicks logged)",
+                                text = "• Firestore Collection: affiliateClicks (${affiliateClicks.size} clicks logged)",
                                 fontWeight = FontWeight.Bold,
                                 color = TealPrimary
                             )

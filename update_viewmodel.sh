@@ -1,0 +1,1 @@
+sed -i '/_userMessage.value = "Opening/i \        firebaseSyncRepo.logAffiliateClick(firebaseUser.value.id, medicineName, provider.displayName)' app/src/main/java/com/example/ui/viewmodel/MedicineViewModel.kt

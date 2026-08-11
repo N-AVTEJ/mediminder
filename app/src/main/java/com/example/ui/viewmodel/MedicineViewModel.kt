@@ -46,7 +46,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     // Supabase Inventory & Affiliate Clicks State Flow
     val userInventory = PharmacyAffiliateService.inventoryTable
-    val affiliateClicks = PharmacyAffiliateService.affiliateClicksTable
+    val affiliateClicks = firebaseSyncRepo.affiliateClicks
 
     fun isMedicineInInventory(medicineName: String): Boolean {
         if (medicineName.isBlank()) return true
@@ -68,6 +68,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             provider = provider,
             userId = firebaseUser.value.id
         )
+        firebaseSyncRepo.logAffiliateClick(firebaseUser.value.id, medicineName, provider.displayName)
         _userMessage.value = "Opening ${provider.displayName} for $medicineName (Logged affiliate earnings tracking)"
     }
 
