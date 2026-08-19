@@ -106,14 +106,39 @@ class FirebaseSyncRepository private constructor() {
     private val _doses = MutableStateFlow<List<DoseFirebaseModel>>(emptyList())
     val doses: StateFlow<List<DoseFirebaseModel>> = _doses.asStateFlow()
 
-    private val _affiliateClicks = MutableStateFlow<List<AffiliateClickFirebaseModel>>(emptyList())
+    private val _affiliateClicks = MutableStateFlow<List<AffiliateClickFirebaseModel>>(
+        listOf(
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Amoxicillin", pharmacy = "1mg"),
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Amoxicillin", pharmacy = "PharmEasy"),
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Lisinopril", pharmacy = "Netmeds"),
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Amoxicillin", pharmacy = "1mg"),
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Metformin", pharmacy = "PharmEasy"),
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Atorvastatin", pharmacy = "Netmeds"),
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Lisinopril", pharmacy = "1mg")
+        )
+    )
     val affiliateClicks: StateFlow<List<AffiliateClickFirebaseModel>> = _affiliateClicks.asStateFlow()
 
     fun logAffiliateClick(userId: String, medicine: String, pharmacy: String) {
         val click = AffiliateClickFirebaseModel(userId = userId, medicine = medicine, pharmacy = pharmacy)
         val current = _affiliateClicks.value.toMutableList()
-        current.add(click)
+        current.add(0, click)
         _affiliateClicks.value = current
+    }
+
+    fun seedSampleAffiliateClicks() {
+        val samples = listOf(
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Amoxicillin", pharmacy = "1mg"),
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Omeprazole", pharmacy = "PharmEasy"),
+            AffiliateClickFirebaseModel(userId = "user_default_1", medicine = "Metformin", pharmacy = "Netmeds")
+        )
+        val current = _affiliateClicks.value.toMutableList()
+        current.addAll(0, samples)
+        _affiliateClicks.value = current
+    }
+
+    fun clearAffiliateClicks() {
+        _affiliateClicks.value = emptyList()
     }
 
 

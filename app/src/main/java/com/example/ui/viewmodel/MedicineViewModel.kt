@@ -72,6 +72,16 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         _userMessage.value = "Opening ${provider.displayName} for $medicineName (Logged affiliate earnings tracking)"
     }
 
+    fun seedSampleAffiliateClicks() {
+        firebaseSyncRepo.seedSampleAffiliateClicks()
+        _userMessage.value = "Added test affiliate click logs for analytics demonstration"
+    }
+
+    fun clearAffiliateClicks() {
+        firebaseSyncRepo.clearAffiliateClicks()
+        _userMessage.value = "Cleared all affiliate click logs"
+    }
+
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 

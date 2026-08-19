@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.db.GuardianEntity
+import com.example.ui.components.AffiliateAnalyticsCard
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.MedicineViewModel
 
@@ -294,6 +295,11 @@ fun ProfileScreen(
                         }
                     }
                 }
+            }
+
+            // Affiliate Click Analytics & Admin Earnings Tracking
+            item {
+                AffiliateAnalyticsCard(viewModel = viewModel)
             }
 
             // Guardian Contacts List Section
