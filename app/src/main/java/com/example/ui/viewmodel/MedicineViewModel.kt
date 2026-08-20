@@ -43,6 +43,7 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     val firebaseMedicines: StateFlow<List<MedicineFirebaseModel>> = firebaseSyncRepo.medicines
     val firebaseDoses: StateFlow<List<DoseFirebaseModel>> = firebaseSyncRepo.doses
     val firebaseReminders: StateFlow<List<ReminderFirebaseModel>> = firebaseSyncRepo.reminders
+    val firebaseGuardians: StateFlow<List<GuardianFirestoreModel>> = firebaseSyncRepo.guardians
 
     // Supabase Inventory & Affiliate Clicks State Flow
     val userInventory = PharmacyAffiliateService.inventoryTable
@@ -369,14 +370,25 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
                     notifyOnMissed = true
                 )
             )
-            _userMessage.value = "Added $name as guardian contact"
+            val patientId = firebaseUser.value.id
+            val guardianUid = "guardian_" + java.util.UUID.randomUUID().toString().take(6)
+            firebaseSyncRepo.addGuardianToFirebase(
+                patientId = patientId,
+                guardianPhone = phone,
+                guardianUid = guardianUid,
+                status = "pending",
+                name = name,
+                relationship = relationship
+            )
+            _userMessage.value = "Added $name as guardian contact & synced to Firestore 'guardians'"
         }
     }
 
     fun deleteGuardian(guardian: GuardianEntity) {
         viewModelScope.launch {
             repository.deleteGuardian(guardian)
-            _userMessage.value = "Removed guardian contact"
+            firebaseSyncRepo.deleteGuardianFromFirebaseByPhone(guardian.phone)
+            _userMessage.value = "Removed guardian contact from local DB & Firestore"
         }
     }
 

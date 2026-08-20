@@ -81,6 +81,24 @@ data class ReminderFirebaseModel(
 )
 
 /**
+ * Requirement Phase 21: Firestore "guardians" collection data model:
+ * {patientId, guardianPhone, guardianUid, status: pending/linked}
+ */
+data class GuardianFirestoreModel(
+    val id: String = UUID.randomUUID().toString(),
+    val patientId: String = "user_default_1",
+    val guardianPhone: String,
+    val guardianUid: String = "guardian_" + UUID.randomUUID().toString().take(6),
+    val status: String = "pending", // "pending" or "linked"
+    val name: String = "",
+    val relationship: String = "Caregiver",
+    val createdAt: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date()),
+    val patient_id: String = patientId,
+    val guardian_phone: String = guardianPhone,
+    val guardian_uid: String = guardianUid
+)
+
+/**
  * Firebase Firestore Local Repository Sync Manager.
  * Maintains real-time state mirror of Firebase Firestore collections.
  */
@@ -147,6 +165,73 @@ class FirebaseSyncRepository private constructor() {
     val reminders: StateFlow<List<ReminderFirebaseModel>> = _reminders.asStateFlow()
     private val _inventory = MutableStateFlow<List<InventoryFirebaseModel>>(emptyList())
     val inventory: StateFlow<List<InventoryFirebaseModel>> = _inventory.asStateFlow()
+
+    private val _guardians = MutableStateFlow<List<GuardianFirestoreModel>>(
+        listOf(
+            GuardianFirestoreModel(
+                id = "guardian_1",
+                patientId = "user_default_1",
+                guardianPhone = "+1 (555) 987-6543",
+                guardianUid = "guardian_user_987",
+                status = "linked",
+                name = "Dr. Sarah Jenkins",
+                relationship = "Primary Caregiver"
+            ),
+            GuardianFirestoreModel(
+                id = "guardian_2",
+                patientId = "user_default_1",
+                guardianPhone = "+1 (555) 345-6789",
+                guardianUid = "guardian_user_345",
+                status = "pending",
+                name = "David Vance",
+                relationship = "Son"
+            )
+        )
+    )
+    val guardians: StateFlow<List<GuardianFirestoreModel>> = _guardians.asStateFlow()
+
+    fun addGuardianToFirebase(
+        patientId: String,
+        guardianPhone: String,
+        guardianUid: String = "guardian_" + UUID.randomUUID().toString().take(6),
+        status: String = "pending",
+        name: String = "",
+        relationship: String = "Caregiver"
+    ): GuardianFirestoreModel {
+        val guardian = GuardianFirestoreModel(
+            patientId = patientId,
+            guardianPhone = guardianPhone,
+            guardianUid = guardianUid,
+            status = status,
+            name = name,
+            relationship = relationship
+        )
+        val current = _guardians.value.toMutableList()
+        current.add(guardian)
+        _guardians.value = current
+
+        val currentGuards = _currentUser.value.guardian_ids.toMutableList()
+        if (!currentGuards.contains(guardian.id)) {
+            currentGuards.add(guardian.id)
+            _currentUser.value = _currentUser.value.copy(guardian_ids = currentGuards)
+        }
+        return guardian
+    }
+
+    fun updateGuardianStatus(guardianId: String, newStatus: String) {
+        val current = _guardians.value.toMutableList()
+        val index = current.indexOfFirst { it.id == guardianId || it.guardianUid == guardianId }
+        if (index != -1) {
+            current[index] = current[index].copy(status = newStatus)
+            _guardians.value = current
+        }
+    }
+
+    fun deleteGuardianFromFirebaseByPhone(phone: String) {
+        val current = _guardians.value.toMutableList()
+        current.removeAll { it.guardianPhone == phone || it.guardian_phone == phone }
+        _guardians.value = current
+    }
 
     fun updateInventory(medicineName: String, quantity: Int) {
         val currentInventory = _inventory.value.toMutableList()

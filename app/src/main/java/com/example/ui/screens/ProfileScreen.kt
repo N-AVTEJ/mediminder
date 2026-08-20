@@ -42,6 +42,7 @@ fun ProfileScreen(
     val fbMedicines by viewModel.firebaseMedicines.collectAsState()
     val fbDoses by viewModel.firebaseDoses.collectAsState()
     val fbReminders by viewModel.firebaseReminders.collectAsState()
+    val fbGuardians by viewModel.firebaseGuardians.collectAsState()
 
     val inventoryItems by viewModel.userInventory.collectAsState()
     val affiliateClicks by viewModel.affiliateClicks.collectAsState()
@@ -253,6 +254,21 @@ fun ProfileScreen(
                                 color = OnMintContainer
                             )
 
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = "• Collection: guardians ({patientId, guardianPhone, guardianUid, status}) - ${fbGuardians.size} records",
+                                fontWeight = FontWeight.Bold,
+                                color = TealPrimary
+                            )
+                            fbGuardians.forEach { g ->
+                                Text(
+                                    text = "patientId: ${g.patientId} | phone: ${g.guardianPhone} | uid: ${g.guardianUid} | status: ${g.status.uppercase()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = OnMintContainer
+                                )
+                            }
+
                             Spacer(modifier = Modifier.height(12.dp))
                             HorizontalDivider(color = TealPrimary.copy(alpha = 0.3f))
                             Spacer(modifier = Modifier.height(12.dp))
@@ -339,8 +355,12 @@ fun ProfileScreen(
                 }
             } else {
                 items(guardians, key = { it.id }) { guardian ->
+                    val matchingFbGuard = fbGuardians.find { it.guardianPhone == guardian.phone || it.guardian_phone == guardian.phone }
+                    val firestoreStatus = matchingFbGuard?.status ?: "linked"
+
                     GuardianCardItem(
                         guardian = guardian,
+                        status = firestoreStatus,
                         onCall = {
                             try {
                                 val intent = Intent(Intent.ACTION_DIAL).apply {
@@ -512,6 +532,7 @@ fun ProfileScreen(
 @Composable
 private fun GuardianCardItem(
     guardian: GuardianEntity,
+    status: String = "linked",
     onCall: () -> Unit,
     onSendAlert: () -> Unit,
     onDelete: () -> Unit
@@ -554,11 +575,28 @@ private fun GuardianCardItem(
                     }
 
                     Column {
-                        Text(
-                            text = guardian.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = guardian.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (status.equals("linked", ignoreCase = true)) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
+                            ) {
+                                Text(
+                                    text = status.uppercase(),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (status.equals("linked", ignoreCase = true)) Color(0xFF2E7D32) else Color(0xFFE65100)
+                                )
+                            }
+                        }
                         Text(
                             text = "${guardian.relationship} • ${guardian.phone}",
                             style = MaterialTheme.typography.bodyMedium,
