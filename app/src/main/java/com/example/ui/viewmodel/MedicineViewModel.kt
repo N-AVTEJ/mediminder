@@ -361,6 +361,22 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun addGuardian(name: String, relationship: String, phone: String) {
+        addGuardianWithInvite(
+            context = getApplication(),
+            name = name,
+            relationship = relationship,
+            phone = phone,
+            sendVia = "SMS"
+        )
+    }
+
+    fun addGuardianWithInvite(
+        context: android.content.Context,
+        name: String,
+        relationship: String,
+        phone: String,
+        sendVia: String = "SMS"
+    ) {
         viewModelScope.launch {
             repository.addGuardian(
                 GuardianEntity(
@@ -372,16 +388,66 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             )
             val patientId = firebaseUser.value.id
             val guardianUid = "guardian_" + java.util.UUID.randomUUID().toString().take(6)
+            val inviteToken = com.example.data.firebase.GuardianInviteService.generateInviteToken()
+            val inviteLink = com.example.data.firebase.GuardianInviteService.buildInviteLink(inviteToken)
+
             firebaseSyncRepo.addGuardianToFirebase(
                 patientId = patientId,
                 guardianPhone = phone,
                 guardianUid = guardianUid,
                 status = "pending",
                 name = name,
-                relationship = relationship
+                relationship = relationship,
+                inviteToken = inviteToken,
+                inviteLink = inviteLink
             )
-            _userMessage.value = "Added $name as guardian contact & synced to Firestore 'guardians'"
+
+            val patientName = profile.value?.name ?: "Eleanor Vance"
+
+            if (sendVia.equals("WHATSAPP", ignoreCase = true)) {
+                com.example.data.firebase.GuardianInviteService.sendWhatsAppInvite(
+                    context = context,
+                    guardianPhone = phone,
+                    patientName = patientName,
+                    inviteLink = inviteLink
+                )
+            } else {
+                com.example.data.firebase.GuardianInviteService.sendSmsInvite(
+                    context = context,
+                    guardianPhone = phone,
+                    patientName = patientName,
+                    inviteLink = inviteLink
+                )
+            }
+
+            _userMessage.value = "Invite link generated ($inviteToken) & sent via $sendVia"
         }
+    }
+
+    fun sendGuardianInvite(
+        context: android.content.Context,
+        guardianPhone: String,
+        inviteLink: String,
+        inviteToken: String,
+        sendVia: String = "SMS"
+    ) {
+        val patientName = profile.value?.name ?: "Eleanor Vance"
+        if (sendVia.equals("WHATSAPP", ignoreCase = true)) {
+            com.example.data.firebase.GuardianInviteService.sendWhatsAppInvite(
+                context = context,
+                guardianPhone = guardianPhone,
+                patientName = patientName,
+                inviteLink = inviteLink
+            )
+        } else {
+            com.example.data.firebase.GuardianInviteService.sendSmsInvite(
+                context = context,
+                guardianPhone = guardianPhone,
+                patientName = patientName,
+                inviteLink = inviteLink
+            )
+        }
+        _userMessage.value = "Resent invite token ($inviteToken) via $sendVia"
     }
 
     fun deleteGuardian(guardian: GuardianEntity) {

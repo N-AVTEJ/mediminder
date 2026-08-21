@@ -92,10 +92,14 @@ data class GuardianFirestoreModel(
     val status: String = "pending", // "pending" or "linked"
     val name: String = "",
     val relationship: String = "Caregiver",
+    val inviteToken: String = "tok_" + UUID.randomUUID().toString().replace("-", "").take(10),
+    val inviteLink: String = "https://medremind.app/invite?token=$inviteToken",
     val createdAt: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date()),
     val patient_id: String = patientId,
     val guardian_phone: String = guardianPhone,
-    val guardian_uid: String = guardianUid
+    val guardian_uid: String = guardianUid,
+    val invite_token: String = inviteToken,
+    val invite_link: String = inviteLink
 )
 
 /**
@@ -196,7 +200,9 @@ class FirebaseSyncRepository private constructor() {
         guardianUid: String = "guardian_" + UUID.randomUUID().toString().take(6),
         status: String = "pending",
         name: String = "",
-        relationship: String = "Caregiver"
+        relationship: String = "Caregiver",
+        inviteToken: String = GuardianInviteService.generateInviteToken(),
+        inviteLink: String = GuardianInviteService.buildInviteLink(inviteToken)
     ): GuardianFirestoreModel {
         val guardian = GuardianFirestoreModel(
             patientId = patientId,
@@ -204,7 +210,11 @@ class FirebaseSyncRepository private constructor() {
             guardianUid = guardianUid,
             status = status,
             name = name,
-            relationship = relationship
+            relationship = relationship,
+            inviteToken = inviteToken,
+            inviteLink = inviteLink,
+            invite_token = inviteToken,
+            invite_link = inviteLink
         )
         val current = _guardians.value.toMutableList()
         current.add(guardian)

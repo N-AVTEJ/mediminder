@@ -257,13 +257,13 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "• Collection: guardians ({patientId, guardianPhone, guardianUid, status}) - ${fbGuardians.size} records",
+                                text = "• Collection: guardians ({patientId, guardianPhone, guardianUid, status, inviteToken, inviteLink}) - ${fbGuardians.size} records",
                                 fontWeight = FontWeight.Bold,
                                 color = TealPrimary
                             )
                             fbGuardians.forEach { g ->
                                 Text(
-                                    text = "patientId: ${g.patientId} | phone: ${g.guardianPhone} | uid: ${g.guardianUid} | status: ${g.status.uppercase()}",
+                                    text = "phone: ${g.guardianPhone} | status: ${g.status.uppercase()} | token: ${g.inviteToken} | link: ${g.inviteLink}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = OnMintContainer
                                 )
@@ -358,9 +358,14 @@ fun ProfileScreen(
                     val matchingFbGuard = fbGuardians.find { it.guardianPhone == guardian.phone || it.guardian_phone == guardian.phone }
                     val firestoreStatus = matchingFbGuard?.status ?: "linked"
 
+                    val inviteToken = matchingFbGuard?.inviteToken ?: ("tok_" + guardian.id.toString().take(8))
+                    val inviteLink = matchingFbGuard?.inviteLink ?: "https://medremind.app/invite?token=$inviteToken"
+
                     GuardianCardItem(
                         guardian = guardian,
                         status = firestoreStatus,
+                        inviteToken = inviteToken,
+                        inviteLink = inviteLink,
                         onCall = {
                             try {
                                 val intent = Intent(Intent.ACTION_DIAL).apply {
@@ -377,6 +382,24 @@ fun ProfileScreen(
                                 "Test missed-dose SMS alert sent to ${guardian.name} (${guardian.phone})",
                                 Toast.LENGTH_LONG
                             ).show()
+                        },
+                        onSendSmsInvite = {
+                            viewModel.sendGuardianInvite(
+                                context = context,
+                                guardianPhone = guardian.phone,
+                                inviteLink = inviteLink,
+                                inviteToken = inviteToken,
+                                sendVia = "SMS"
+                            )
+                        },
+                        onSendWhatsAppInvite = {
+                            viewModel.sendGuardianInvite(
+                                context = context,
+                                guardianPhone = guardian.phone,
+                                inviteLink = inviteLink,
+                                inviteToken = inviteToken,
+                                sendVia = "WHATSAPP"
+                            )
                         },
                         onDelete = {
                             viewModel.deleteGuardian(guardian)
@@ -521,8 +544,8 @@ fun ProfileScreen(
     if (showAddGuardianModal) {
         AddGuardianDialog(
             onDismiss = { showAddGuardianModal = false },
-            onConfirm = { name, relationship, phone ->
-                viewModel.addGuardian(name, relationship, phone)
+            onConfirm = { name, relationship, phone, sendVia ->
+                viewModel.addGuardianWithInvite(context, name, relationship, phone, sendVia)
                 showAddGuardianModal = false
             }
         )
@@ -533,8 +556,12 @@ fun ProfileScreen(
 private fun GuardianCardItem(
     guardian: GuardianEntity,
     status: String = "linked",
+    inviteToken: String? = null,
+    inviteLink: String? = null,
     onCall: () -> Unit,
     onSendAlert: () -> Unit,
+    onSendSmsInvite: () -> Unit,
+    onSendWhatsAppInvite: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
@@ -607,6 +634,75 @@ private fun GuardianCardItem(
 
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Outlined.Delete, contentDescription = "Delete Guardian", tint = MissedRed)
+                }
+            }
+
+            if (!inviteToken.isNullOrBlank() || !inviteLink.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MintContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.VpnKey, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "Invite Token: ${inviteToken ?: "N/A"}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = OnMintContainer
+                            )
+                        }
+
+                        Text(
+                            text = "Link: ${inviteLink ?: "N/A"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = OnMintContainer.copy(alpha = 0.8f)
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onSendSmsInvite,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .testTag("invite_sms_btn_${guardian.id}"),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Icon(Icons.Default.Sms, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("SMS (Twilio)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = onSendWhatsAppInvite,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .testTag("invite_whatsapp_btn_${guardian.id}"),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -714,16 +810,17 @@ fun EditProfileDialog(
 @Composable
 fun AddGuardianDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, relationship: String, phone: String) -> Unit
+    onConfirm: (name: String, relationship: String, phone: String, sendVia: String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var relationship by remember { mutableStateOf("Caregiver") }
     var phone by remember { mutableStateOf("") }
+    var sendVia by remember { mutableStateOf("SMS") } // "SMS" or "WHATSAPP"
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Add Guardian Contact", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Add Guardian Contact & Invite", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -754,19 +851,55 @@ fun AddGuardianDialog(
                         .testTag("input_guardian_phone"),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                Text(
+                    text = "Send Invite Link Via:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TealPrimary
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = sendVia == "SMS",
+                        onClick = { sendVia = "SMS" },
+                        label = { Text("SMS (Twilio)") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Sms, contentDescription = null, modifier = Modifier.size(16.dp))
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("chip_invite_sms")
+                    )
+
+                    FilterChip(
+                        selected = sendVia == "WHATSAPP",
+                        onClick = { sendVia = "WHATSAPP" },
+                        label = { Text("WhatsApp") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("chip_invite_whatsapp")
+                    )
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
                     if (name.isNotBlank() && phone.isNotBlank()) {
-                        onConfirm(name, relationship, phone)
+                        onConfirm(name, relationship, phone, sendVia)
                     }
                 },
                 modifier = Modifier.testTag("confirm_add_guardian_btn"),
                 colors = ButtonDefaults.buttonColors(containerColor = TealPrimary)
             ) {
-                Text("Add Contact", fontWeight = FontWeight.Bold)
+                Text("Add & Send Invite", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
