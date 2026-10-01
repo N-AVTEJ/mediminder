@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         requestNotificationPermissionIfNeeded()
-        handleNotificationIntent(intent)
+        handleIncomingIntent(intent)
 
         setContent {
             MedicineReminderTheme {
@@ -55,7 +55,16 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleIncomingIntent(intent)
+    }
+
+    private fun handleIncomingIntent(intent: Intent?) {
+        if (intent == null) return
         handleNotificationIntent(intent)
+        // Phase 23: Handle guardian invite deep link
+        if (intent.data != null) {
+            medicineViewModel.handleDeepLink(intent.data)
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {

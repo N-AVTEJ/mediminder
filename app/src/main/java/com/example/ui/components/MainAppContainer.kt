@@ -18,6 +18,7 @@ import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.RemindersScreen
 import com.example.ui.screens.ScanScreen
+import com.example.ui.screens.GuardianAcceptDialog
 import com.example.ui.theme.TealPrimary
 import com.example.ui.viewmodel.MedicineViewModel
 import kotlinx.coroutines.launch
@@ -43,6 +44,9 @@ fun MainAppContainer(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val userMessage by viewModel.userMessage.collectAsState()
+
+    val showAcceptDialog by viewModel.showGuardianAcceptDialog.collectAsState()
+    val acceptState by viewModel.guardianAcceptState.collectAsState()
 
     LaunchedEffect(userMessage) {
         userMessage?.let { msg ->
@@ -119,6 +123,16 @@ fun MainAppContainer(
                     viewModel = viewModel
                 )
             }
+        }
+
+        if (showAcceptDialog && acceptState != null) {
+            GuardianAcceptDialog(
+                state = acceptState!!,
+                onDismiss = { viewModel.dismissGuardianAccept() },
+                onConfirm = { token, guardianUid, name, phone ->
+                    viewModel.confirmGuardianAccept(token, guardianUid, name, phone)
+                }
+            )
         }
     }
 }

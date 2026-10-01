@@ -95,11 +95,13 @@ data class GuardianFirestoreModel(
     val inviteToken: String = "tok_" + UUID.randomUUID().toString().replace("-", "").take(10),
     val inviteLink: String = "https://medremind.app/invite?token=$inviteToken",
     val createdAt: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date()),
+    val linkedAt: String? = null,
     val patient_id: String = patientId,
     val guardian_phone: String = guardianPhone,
     val guardian_uid: String = guardianUid,
     val invite_token: String = inviteToken,
-    val invite_link: String = inviteLink
+    val invite_link: String = inviteLink,
+    val linked_at: String? = linkedAt
 )
 
 /**
@@ -235,6 +237,85 @@ class FirebaseSyncRepository private constructor() {
             current[index] = current[index].copy(status = newStatus)
             _guardians.value = current
         }
+    }
+
+    fun findGuardianByToken(token: String): GuardianFirestoreModel? {
+        val cleanToken = token.trim()
+        return _guardians.value.find {
+            it.inviteToken.equals(cleanToken, ignoreCase = true) ||
+            it.invite_token.equals(cleanToken, ignoreCase = true) ||
+            it.id.equals(cleanToken, ignoreCase = true)
+        }
+    }
+
+    fun findGuardianById(id: String): GuardianFirestoreModel? {
+        return _guardians.value.find { it.id == id || it.guardianUid == id }
+    }
+
+    fun findGuardianByPhone(phone: String): GuardianFirestoreModel? {
+        val cleanPhone = phone.replace(Regex("[^0-9]"), "")
+        return _guardians.value.find {
+            it.guardianPhone.replace(Regex("[^0-9]"), "") == cleanPhone ||
+            it.guardian_phone.replace(Regex("[^0-9]"), "") == cleanPhone
+        }
+    }
+
+    /**
+     * Requirement Phase 23: Guardian accept flow.
+     * Guardian opens link, installs app or web view, confirms:
+     * update guardians doc status="linked", link guardianUid.
+     */
+    fun linkGuardianWithToken(
+        token: String,
+        guardianUid: String,
+        guardianName: String? = null,
+        guardianPhone: String? = null
+    ): GuardianFirestoreModel? {
+        val current = _guardians.value.toMutableList()
+        val cleanToken = token.trim()
+        val index = current.indexOfFirst {
+            it.inviteToken.equals(cleanToken, ignoreCase = true) ||
+            it.invite_token.equals(cleanToken, ignoreCase = true) ||
+            it.id.equals(cleanToken, ignoreCase = true)
+        }
+        val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
+        if (index != -1) {
+            val existing = current[index]
+            val effectiveUid = if (guardianUid.isNotBlank()) guardianUid else existing.guardianUid
+            val effectiveName = if (!guardianName.isNullOrBlank()) guardianName else existing.name
+            val effectivePhone = if (!guardianPhone.isNullOrBlank()) guardianPhone else existing.guardianPhone
+
+            val updated = existing.copy(
+                status = "linked",
+                guardianUid = effectiveUid,
+                guardian_uid = effectiveUid,
+                name = effectiveName,
+                guardianPhone = effectivePhone,
+                guardian_phone = effectivePhone,
+                linkedAt = nowIso,
+                linked_at = nowIso
+            )
+            current[index] = updated
+            _guardians.value = current
+
+            // Add linked guardianUid to patient users collection guardian_ids
+            val currentGuards = _currentUser.value.guardian_ids.toMutableList()
+            if (!currentGuards.contains(effectiveUid)) {
+                currentGuards.add(effectiveUid)
+            }
+            if (!currentGuards.contains(updated.id)) {
+                currentGuards.add(updated.id)
+            }
+            _currentUser.value = _currentUser.value.copy(guardian_ids = currentGuards)
+
+            return updated
+        }
+        return null
+    }
+
+    fun linkGuardianById(guardianId: String, guardianUid: String): GuardianFirestoreModel? {
+        val guardian = findGuardianById(guardianId) ?: return null
+        return linkGuardianWithToken(guardian.inviteToken, guardianUid)
     }
 
     fun deleteGuardianFromFirebaseByPhone(phone: String) {

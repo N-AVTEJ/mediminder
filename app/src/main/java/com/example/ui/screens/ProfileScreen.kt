@@ -49,6 +49,7 @@ fun ProfileScreen(
 
     var showEditProfileModal by remember { mutableStateOf(false) }
     var showAddGuardianModal by remember { mutableStateOf(false) }
+    var showEnterTokenDialog by remember { mutableStateOf(false) }
     var showFirebaseSchemaInspector by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -263,7 +264,7 @@ fun ProfileScreen(
                             )
                             fbGuardians.forEach { g ->
                                 Text(
-                                    text = "phone: ${g.guardianPhone} | status: ${g.status.uppercase()} | token: ${g.inviteToken} | link: ${g.inviteLink}",
+                                    text = "phone: ${g.guardianPhone} | status: ${g.status.uppercase()} | uid: ${g.guardianUid} | token: ${g.inviteToken} | linkedAt: ${g.linkedAt ?: "pending"}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = OnMintContainer
                                 )
@@ -320,26 +321,42 @@ fun ProfileScreen(
 
             // Guardian Contacts List Section
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Guardian Contacts (${guardians.size})",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Button(
-                        onClick = { showAddGuardianModal = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.testTag("add_guardian_btn")
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Guardian", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "Guardian Contacts (${guardians.size})",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { showEnterTokenDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.testTag("enter_invite_link_btn"),
+                                contentPadding = PaddingValues(horizontal = 10.dp)
+                            ) {
+                                Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Enter Link", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            Button(
+                                onClick = { showAddGuardianModal = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.testTag("add_guardian_btn"),
+                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Add", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
@@ -357,6 +374,7 @@ fun ProfileScreen(
                 items(guardians, key = { it.id }) { guardian ->
                     val matchingFbGuard = fbGuardians.find { it.guardianPhone == guardian.phone || it.guardian_phone == guardian.phone }
                     val firestoreStatus = matchingFbGuard?.status ?: "linked"
+                    val guardianUid = matchingFbGuard?.guardianUid
 
                     val inviteToken = matchingFbGuard?.inviteToken ?: ("tok_" + guardian.id.toString().take(8))
                     val inviteLink = matchingFbGuard?.inviteLink ?: "https://medremind.app/invite?token=$inviteToken"
@@ -364,8 +382,12 @@ fun ProfileScreen(
                     GuardianCardItem(
                         guardian = guardian,
                         status = firestoreStatus,
+                        guardianUid = guardianUid,
                         inviteToken = inviteToken,
                         inviteLink = inviteLink,
+                        onOpenAcceptFlow = {
+                            viewModel.openGuardianAcceptForToken(inviteToken)
+                        },
                         onCall = {
                             try {
                                 val intent = Intent(Intent.ACTION_DIAL).apply {
@@ -550,14 +572,27 @@ fun ProfileScreen(
             }
         )
     }
+
+    // Enter Invite Token / Link Dialog (Phase 23)
+    if (showEnterTokenDialog) {
+        EnterInviteTokenDialog(
+            onDismiss = { showEnterTokenDialog = false },
+            onConfirm = { input ->
+                viewModel.openGuardianAcceptForToken(input)
+                showEnterTokenDialog = false
+            }
+        )
+    }
 }
 
 @Composable
 private fun GuardianCardItem(
     guardian: GuardianEntity,
     status: String = "linked",
+    guardianUid: String? = null,
     inviteToken: String? = null,
     inviteLink: String? = null,
+    onOpenAcceptFlow: () -> Unit = {},
     onCall: () -> Unit,
     onSendAlert: () -> Unit,
     onSendSmsInvite: () -> Unit,
@@ -706,7 +741,57 @@ private fun GuardianCardItem(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            if (!guardianUid.isNullOrBlank() || status.equals("linked", ignoreCase = true)) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "UID: ${guardianUid ?: "pending"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = if (status.equals("linked", ignoreCase = true)) "Firestore Linked ✓" else "Pending Confirmation",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (status.equals("linked", ignoreCase = true)) Color(0xFF2E7D32) else Color(0xFFE65100)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Phase 23: Open Accept Portal Button (App Native / Web View)
+            Button(
+                onClick = onOpenAcceptFlow,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+                    .testTag("simulate_accept_btn_${guardian.id}"),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (status.equals("linked", ignoreCase = true)) MintContainer else TealPrimary,
+                    contentColor = if (status.equals("linked", ignoreCase = true)) OnMintContainer else Color.White
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(
+                    imageVector = if (status.equals("linked", ignoreCase = true)) Icons.Default.Verified else Icons.Default.OpenInBrowser,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (status.equals("linked", ignoreCase = true)) "Guardian Linked (Open Portal)" else "Accept Invite (App / Web View)",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -900,6 +985,68 @@ fun AddGuardianDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = TealPrimary)
             ) {
                 Text("Add & Send Invite", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun EnterInviteTokenDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var input by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Link, contentDescription = null, tint = TealPrimary)
+                Text("Accept Guardian Invite", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Paste an invite token (e.g. tok_xxxxxxxxxx) or a full invite link (https://medremind.app/invite?token=...) to open the Caregiver Accept Portal:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    label = { Text("Invite Token or Link URL") },
+                    placeholder = { Text("https://medremind.app/invite?token=...") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("invite_token_input_field"),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = false,
+                    maxLines = 3
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (input.isNotBlank()) {
+                        onConfirm(input.trim())
+                    }
+                },
+                modifier = Modifier.testTag("confirm_open_invite_btn"),
+                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                enabled = input.isNotBlank()
+            ) {
+                Text("Open Accept Flow", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
