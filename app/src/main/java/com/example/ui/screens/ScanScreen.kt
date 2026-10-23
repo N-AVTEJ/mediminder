@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -36,6 +37,7 @@ fun ScanScreen(
     viewModel: MedicineViewModel,
     onSavedSuccessfully: () -> Unit
 ) {
+    var isCameraPreviewOpen by remember { mutableStateOf(false) }
     val isScanning by viewModel.isScanning.collectAsState()
     val scanResult by viewModel.scanResult.collectAsState()
     val scanError by viewModel.scanError.collectAsState()
@@ -49,101 +51,139 @@ fun ScanScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Scan Prescription",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold
+    if (isCameraPreviewOpen) {
+        BackHandler { isCameraPreviewOpen = false }
+        PrescriptionCameraScreen(
+            onPhotoCaptured = { uri ->
+                isCameraPreviewOpen = false
+                viewModel.scanPrescriptionUri(uri)
+            },
+            onClose = { isCameraPreviewOpen = false }
+        )
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = "Scan Prescription",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
                     )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
                 )
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // Scanner Instruction Hero Banner
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MintContainer
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+            }
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Scanner Instruction Hero Banner
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MintContainer
+                        )
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .background(TealPrimary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DocumentScanner,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(40.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = "AI Prescription Scanner",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = OnMintContainer
-                        )
-
-                        Text(
-                            text = "Upload a photo of your prescription or medicine container. Gemini AI will extract details into an editable list.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = OnMintContainer.copy(alpha = 0.85f),
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Button(
-                            onClick = { photoPickerLauncher.launch("image/*") },
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp)
-                                .testTag("upload_prescription_btn"),
-                            colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                            shape = RoundedCornerShape(14.dp)
+                                .padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.AddAPhoto,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(CircleShape)
+                                    .background(TealPrimary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DocumentScanner,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
                             Text(
-                                text = "Upload / Take Prescription Photo",
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold
+                                text = "AI Prescription Scanner",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = OnMintContainer
                             )
+
+                            Text(
+                                text = "Use live CameraX preview or upload from your gallery. Gemini AI will extract details into an editable list.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = OnMintContainer.copy(alpha = 0.85f),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = { isCameraPreviewOpen = true },
+                                    modifier = Modifier
+                                        .weight(1.1f)
+                                        .height(54.dp)
+                                        .testTag("upload_prescription_btn"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CameraAlt,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Take Photo",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = { photoPickerLauncher.launch("image/*") },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(54.dp)
+                                        .testTag("pick_from_gallery_btn"),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PhotoLibrary,
+                                        contentDescription = null,
+                                        tint = TealPrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Gallery",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TealPrimary
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
 
             // Quick Test Sample Prescriptions
             item {
@@ -265,24 +305,34 @@ fun ScanScreen(
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Button(
-                                    onClick = { photoPickerLauncher.launch("image/*") },
+                                    onClick = { isCameraPreviewOpen = true },
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                                     shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f).testTag("retry_camera_btn")
                                 ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Try Clearer Photo")
+                                    Text("Retake Photo", fontSize = 13.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { photoPickerLauncher.launch("image/*") },
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f).testTag("retry_gallery_btn")
+                                ) {
+                                    Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Gallery", fontSize = 13.sp)
                                 }
 
                                 OutlinedButton(
                                     onClick = { viewModel.clearScanState() },
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
-                                    Text("Dismiss")
+                                    Text("Dismiss", fontSize = 13.sp)
                                 }
                             }
                         }
@@ -421,6 +471,7 @@ fun ScanScreen(
             }
         }
     }
+}
 }
 
 @Composable
@@ -760,7 +811,9 @@ private fun EditableMedicationCard(
                     onUpdate(item.copy(instructions = it))
                 },
                 label = { Text("Instructions") },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("input_scanned_instructions_$index"),
                 shape = RoundedCornerShape(12.dp)
             )
         }

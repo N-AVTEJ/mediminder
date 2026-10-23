@@ -3,10 +3,16 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
 
     <application
         android:name=".MainApplication"
@@ -56,6 +62,8 @@
             <intent-filter>
                 <action android:name="com.example.action.SHOW_DOSE_NOTIFICATION" />
                 <action android:name="com.example.action.MARK_DOSE_TAKEN" />
+                <action android:name="com.example.action.ESCALATION_TIER1" />
+                <action android:name="com.example.action.CHECK_MISSED_DOSE" />
             </intent-filter>
         </receiver>
 

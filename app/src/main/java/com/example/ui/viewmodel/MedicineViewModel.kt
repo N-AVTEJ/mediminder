@@ -164,6 +164,22 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * Phase 24: Test Escalation Tier 1 trigger (15 min missed dose with louder sound and vibration).
+     */
+    fun triggerEscalationTier1Test(medicineName: String = "Lisinopril", dose: String = "10mg") {
+        val fakeDoseId = "test_escalation_" + System.currentTimeMillis()
+        val nowIso = java.time.ZonedDateTime.now().minusMinutes(15).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        NotificationScheduler.triggerEscalationTier1Now(
+            context = getApplication(),
+            doseId = fakeDoseId,
+            medicineName = medicineName,
+            dose = dose,
+            scheduledTimeStr = nowIso
+        )
+        _userMessage.value = "Triggered Escalation Tier 1 alert (15m Missed) with loud notification & vibration!"
+    }
+
     fun toggleReminder(id: Int, isActive: Boolean) {
         viewModelScope.launch {
             repository.toggleReminderActive(id, isActive)
@@ -236,6 +252,52 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             _editableScannedList.value = emptyList()
 
             val result = prescriptionScanner.analyzePrescription(uri)
+            _isScanning.value = false
+
+            result.onSuccess { res ->
+                _scanResult.value = res
+                _editableScannedList.value = res.items.map { it.copy() }
+            }.onFailure { error ->
+                val errorMsg = when (error) {
+                    is PrescriptionScanException -> error.message ?: "Scanning failed."
+                    else -> "Unable to read prescription image. Text may be blurry or missing. Please try a clearer image."
+                }
+                _scanError.value = errorMsg
+            }
+        }
+    }
+
+    fun scanPrescriptionBitmap(bitmap: android.graphics.Bitmap) {
+        viewModelScope.launch {
+            _isScanning.value = true
+            _scanError.value = null
+            _scanResult.value = null
+            _editableScannedList.value = emptyList()
+
+            val result = prescriptionScanner.analyzePrescription(bitmap)
+            _isScanning.value = false
+
+            result.onSuccess { res ->
+                _scanResult.value = res
+                _editableScannedList.value = res.items.map { it.copy() }
+            }.onFailure { error ->
+                val errorMsg = when (error) {
+                    is PrescriptionScanException -> error.message ?: "Scanning failed."
+                    else -> "Unable to read prescription image. Text may be blurry or missing. Please try a clearer image."
+                }
+                _scanError.value = errorMsg
+            }
+        }
+    }
+
+    fun scanPrescriptionBytes(bytes: ByteArray) {
+        viewModelScope.launch {
+            _isScanning.value = true
+            _scanError.value = null
+            _scanResult.value = null
+            _editableScannedList.value = emptyList()
+
+            val result = prescriptionScanner.analyzePrescription(bytes)
             _isScanning.value = false
 
             result.onSuccess { res ->
