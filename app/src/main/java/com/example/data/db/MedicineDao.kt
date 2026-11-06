@@ -41,6 +41,12 @@ interface DoseLogDao {
     @Query("UPDATE dose_logs SET status = :status, takenTime = :takenTime WHERE id = :logId")
     suspend fun updateLogStatus(logId: Int, status: String, takenTime: String?)
 
+    @Query("UPDATE dose_logs SET escalationStage = :stage WHERE id = :logId")
+    suspend fun updateEscalationStage(logId: Int, stage: Int)
+
+    @Query("UPDATE dose_logs SET status = :status, escalationStage = :stage WHERE id = :logId")
+    suspend fun updateLogStatusAndStage(logId: Int, status: String, stage: Int)
+
     @Query("DELETE FROM dose_logs WHERE reminderId = :reminderId")
     suspend fun deleteLogsForReminder(reminderId: Int)
 }

@@ -443,6 +443,29 @@ fun DoseScheduleCard(
                 color = TextSecondary
             )
 
+            if (log.escalationStage == 2) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = Color(0xFFB71C1C),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.testTag("escalation_stage2_badge_${log.id}")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Stage 2 Escalation (30m Overdue) • Guardian Payload Prepared",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
             // Action Buttons with Large Elderly-Friendly Touch Targets

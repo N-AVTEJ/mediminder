@@ -31,6 +31,8 @@ fun RemindersScreen(
     viewModel: MedicineViewModel
 ) {
     val reminders by viewModel.reminders.collectAsState()
+    val preparedPayloads by viewModel.preparedGuardianPayloads.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showAddDialog by remember { mutableStateOf(false) }
     var editingReminderForTime by remember { mutableStateOf<ReminderEntity?>(null) }
 
@@ -243,6 +245,237 @@ fun RemindersScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp
                             )
+                        }
+                    }
+                }
+            }
+
+            // Phase 25: Escalation Tier 2 Card (30-Min Missed Dose & Guardian Notify Payload)
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("card_escalation_tier2"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.error)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.error),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Escalation Tier 2",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Phase 25: Escalation Tier 2",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = "30-Min Missed Dose → Prep Guardian Payload",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "If a scheduled dose is still missed at 30 minutes, the app automatically marks Escalation Stage 2 and prepares a Guardian Notify Payload with patient details, dosage, overdue duration, and SMS/push notification payloads for linked caregivers.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+
+                        FilledTonalButton(
+                            onClick = {
+                                viewModel.triggerEscalationTier2Test()
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("btn_test_escalation_tier2"),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = Color(0xFFB71C1C),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Test 30-Min Stage 2 Alert & Prep Payload",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Phase 25: Prepared Guardian Notify Payloads Section
+            if (preparedPayloads.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Prepared Guardian Notify Payloads (Stage 2)",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFB71C1C),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                items(preparedPayloads) { payload ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("card_prepared_guardian_payload"),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFB71C1C).copy(alpha = 0.5f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.NotificationsActive,
+                                        contentDescription = null,
+                                        tint = Color(0xFFB71C1C),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "${payload.medicineName} (${payload.dose})",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Surface(
+                                    color = Color(0xFFB71C1C),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text(
+                                        text = "STAGE 2 • ${payload.minutesOverdue}m OVERDUE",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = "Patient: ${payload.patientName} (${payload.patientPhone})",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            // Alert Message Box
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface,
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(
+                                        text = "SMS Alert Body Preview:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = payload.smsBody,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                    )
+                                }
+                            }
+
+                            val recipientCount = payload.recipients.size
+                            Text(
+                                text = "Target Recipients ($recipientCount): " +
+                                        payload.recipients.joinToString(", ") { "${it.name} (${it.phone})" }.ifBlank { "None linked yet" },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        viewModel.dispatchGuardianPayload(context, payload)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(42.dp)
+                                        .testTag("btn_dispatch_guardian_payload_${payload.alertId}"),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFB71C1C)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Sms, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (payload.isDispatched) "Dispatched ✓" else "Send SMS to Guardian",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.dismissGuardianPayload(payload.alertId)
+                                    },
+                                    modifier = Modifier
+                                        .height(42.dp)
+                                        .testTag("btn_dismiss_guardian_payload_${payload.alertId}"),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Dismiss", fontSize = 13.sp)
+                                }
+                            }
                         }
                     }
                 }

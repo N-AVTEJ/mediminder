@@ -19,6 +19,7 @@ import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.RemindersScreen
 import com.example.ui.screens.ScanScreen
 import com.example.ui.screens.GuardianAcceptDialog
+import com.example.ui.screens.CheckInScreen
 import com.example.ui.theme.TealPrimary
 import com.example.ui.viewmodel.MedicineViewModel
 import kotlinx.coroutines.launch
@@ -47,6 +48,7 @@ fun MainAppContainer(
 
     val showAcceptDialog by viewModel.showGuardianAcceptDialog.collectAsState()
     val acceptState by viewModel.guardianAcceptState.collectAsState()
+    val checkInState by viewModel.checkInState.collectAsState()
 
     LaunchedEffect(userMessage) {
         userMessage?.let { msg ->

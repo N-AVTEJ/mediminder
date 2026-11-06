@@ -45,6 +45,15 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     val firebaseReminders: StateFlow<List<ReminderFirebaseModel>> = firebaseSyncRepo.reminders
     val firebaseGuardians: StateFlow<List<GuardianFirestoreModel>> = firebaseSyncRepo.guardians
 
+    // Phase 25: Prepared Guardian Notify Payloads State Flow
+    val preparedGuardianPayloads: StateFlow<List<GuardianNotifyPayload>> = firebaseSyncRepo.preparedGuardianPayloads
+
+    // Phase 26: Dispatched FCM Pushes & Guardian Check-in State
+    val dispatchedFcmPushes: StateFlow<List<GuardianFcmPushRecord>> = firebaseSyncRepo.dispatchedFcmPushes
+
+    private val _checkInState = MutableStateFlow<GuardianCheckInState?>(null)
+    val checkInState: StateFlow<GuardianCheckInState?> = _checkInState.asStateFlow()
+
     // Supabase Inventory & Affiliate Clicks State Flow
     val userInventory = PharmacyAffiliateService.inventoryTable
     val affiliateClicks = firebaseSyncRepo.affiliateClicks
@@ -143,7 +152,11 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
 
     fun markDoseStatus(logId: Int, status: String) {
         viewModelScope.launch {
-            repository.updateDoseStatus(logId, status)
+            if (status == "TAKEN") {
+                repository.updateDoseStatusAndStage(logId, "TAKEN", 0)
+            } else {
+                repository.updateDoseStatus(logId, status)
+            }
 
             // Sync with Firebase
             val logs = todayLogs.value
@@ -151,8 +164,15 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             if (target != null) {
                 val fbStatus = status.lowercase()
                 val doseId = firebaseSyncRepo.markDoseStatusByMedicineAndSchedule(target.medicineName, target.scheduledTime, fbStatus)
-                if (doseId != null && status == "TAKEN") {
-                    NotificationScheduler.cancelNotification(getApplication(), doseId)
+                if (status == "TAKEN") {
+                    if (doseId != null) {
+                        NotificationScheduler.cancelNotification(getApplication(), doseId)
+                        firebaseSyncRepo.markEscalationStage(doseId, 0)
+                    }
+                    val prepared = preparedGuardianPayloads.value.find { it.medicineName == target.medicineName }
+                    if (prepared != null) {
+                        firebaseSyncRepo.removePreparedGuardianPayload(prepared.alertId)
+                    }
                 }
             }
 
@@ -178,6 +198,100 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
             scheduledTimeStr = nowIso
         )
         _userMessage.value = "Triggered Escalation Tier 1 alert (15m Missed) with loud notification & vibration!"
+    }
+
+    /**
+     * Phase 25: Test Escalation Tier 2 trigger (30 min missed dose, mark stage 2, prep guardian notify payload).
+     */
+    fun triggerEscalationTier2Test(medicineName: String = "Lisinopril", dose: String = "10mg") {
+        val fakeDoseId = "test_escalation_tier2_" + System.currentTimeMillis()
+        val nowIso = java.time.ZonedDateTime.now().minusMinutes(30).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        NotificationScheduler.triggerEscalationTier2Now(
+            context = getApplication(),
+            doseId = fakeDoseId,
+            medicineName = medicineName,
+            dose = dose,
+            scheduledTimeStr = nowIso
+        )
+        _userMessage.value = "Triggered Escalation Tier 2 (30m Missed): Stage 2 marked & Guardian Notify Payload prepared!"
+    }
+
+    fun dismissGuardianPayload(alertId: String) {
+        firebaseSyncRepo.removePreparedGuardianPayload(alertId)
+        _userMessage.value = "Guardian alert payload dismissed"
+    }
+
+    fun dispatchGuardianPayload(context: android.content.Context, payload: GuardianNotifyPayload) {
+        try {
+            val phone = payload.recipients.firstOrNull { it.phone.isNotBlank() }?.phone ?: ""
+            val cleanPhone = phone.replace(" ", "")
+            val smsIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                data = android.net.Uri.parse("sms:$cleanPhone")
+                putExtra("sms_body", payload.smsBody)
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(smsIntent)
+            firebaseSyncRepo.markGuardianPayloadDispatched(payload.alertId)
+            _userMessage.value = "Dispatched Stage 2 Guardian Alert SMS to $phone"
+        } catch (e: Exception) {
+            firebaseSyncRepo.markGuardianPayloadDispatched(payload.alertId)
+            _userMessage.value = "Guardian alert marked as dispatched"
+        }
+    }
+
+    /**
+     * Phase 26: Test Escalation Tier 3 trigger (Send FCM push to all linked guardians + deep link to check-in).
+     */
+    fun triggerEscalationTier3Test(medicineName: String = "Lisinopril", dose: String = "10mg") {
+        val fakeDoseId = "test_escalation_tier3_" + System.currentTimeMillis()
+        val nowIso = java.time.ZonedDateTime.now().minusMinutes(45).format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        NotificationScheduler.triggerEscalationTier3Now(
+            context = getApplication(),
+            doseId = fakeDoseId,
+            medicineName = medicineName,
+            dose = dose,
+            scheduledTimeStr = nowIso
+        )
+        _userMessage.value = "Triggered Escalation Tier 3: Sent FCM Push to all linked guardians with deep link to check-in screen!"
+    }
+
+    fun openCheckInScreen(
+        doseId: String,
+        medicineName: String = "Lisinopril",
+        dose: String = "10mg",
+        scheduledTime: String = "08:00 AM"
+    ) {
+        val patientName = profile.value?.name ?: "Eleanor Vance"
+        val patientPhone = profile.value?.phone ?: "+1 (555) 234-5678"
+        _checkInState.value = GuardianCheckInState(
+            doseId = doseId,
+            patientName = patientName,
+            patientPhone = patientPhone,
+            medicineName = medicineName,
+            dose = dose,
+            scheduledTime = scheduledTime,
+            deepLinkSource = "in_app"
+        )
+    }
+
+    fun closeCheckInScreen() {
+        _checkInState.value = null
+    }
+
+    fun guardianConfirmDoseTaken(doseId: String, medicineName: String) {
+        viewModelScope.launch {
+            val logs = todayLogs.value
+            val match = logs.find { it.medicineName.equals(medicineName, ignoreCase = true) }
+            if (match != null) {
+                markDoseStatus(match.id, "TAKEN")
+            } else {
+                firebaseSyncRepo.updateDoseStatusInFirebase(doseId, "taken")
+                firebaseSyncRepo.markDoseStatusByMedicineAndSchedule(medicineName, "", "taken")
+                NotificationScheduler.cancelNotification(getApplication(), doseId)
+            }
+            _checkInState.value = _checkInState.value?.copy(checkInStatus = "RESOLVED_TAKEN")
+            _userMessage.value = "Guardian verified dose taken. Escalation resolved!"
+        }
     }
 
     fun toggleReminder(id: Int, isActive: Boolean) {
@@ -579,11 +693,37 @@ class MedicineViewModel(application: Application) : AndroidViewModel(application
     val showGuardianAcceptDialog: StateFlow<Boolean> = _showGuardianAcceptDialog.asStateFlow()
 
     /**
-     * Requirement Phase 23: Intercept deep links (https://medremind.app/invite?token=... or medremind://invite?token=...)
+     * Requirement Phase 23 & Phase 26: Intercept deep links
+     * - Invite flow: https://medremind.app/invite?token=... or medremind://invite?token=...
+     * - Guardian check-in flow: https://medremind.app/checkin?... or medremind://checkin?...
      */
     fun handleDeepLink(uri: Uri?) {
         if (uri == null) return
         val rawUri = uri.toString()
+
+        // Phase 26: Intercept Check-in deep links
+        val host = uri.host ?: ""
+        val path = uri.path ?: ""
+        if (host.equals("checkin", ignoreCase = true) || path.contains("checkin")) {
+            val doseId = uri.getQueryParameter("doseId") ?: ""
+            val patientName = uri.getQueryParameter("patientName") ?: (profile.value?.name ?: "Eleanor Vance")
+            val patientPhone = uri.getQueryParameter("phone") ?: (profile.value?.phone ?: "+1 (555) 234-5678")
+            val medicine = uri.getQueryParameter("medicine") ?: "Lisinopril"
+            val dose = uri.getQueryParameter("dose") ?: "10mg"
+            val time = uri.getQueryParameter("time") ?: "08:00 AM"
+
+            _checkInState.value = GuardianCheckInState(
+                doseId = doseId,
+                patientName = patientName,
+                patientPhone = patientPhone,
+                medicineName = medicine,
+                dose = dose,
+                scheduledTime = time,
+                deepLinkSource = rawUri
+            )
+            return
+        }
+
         val token = GuardianInviteService.extractToken(rawUri)
         if (!token.isNullOrBlank()) {
             openGuardianAcceptForToken(token, rawUri)

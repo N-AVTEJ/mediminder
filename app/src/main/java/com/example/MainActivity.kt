@@ -104,6 +104,9 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this, "Marked $medicineName dose as TAKEN!", Toast.LENGTH_SHORT).show()
                 }
             }
+        } else if (action == DoseNotificationReceiver.ACTION_ESCALATION_TIER2) {
+            val medicineName = intent.getStringExtra(NotificationScheduler.EXTRA_MEDICINE_NAME) ?: "Medication"
+            Toast.makeText(this, "⚠️ Stage 2 Escalation (30m Overdue) for $medicineName. Guardian alert payload prepared.", Toast.LENGTH_LONG).show()
         }
     }
 }

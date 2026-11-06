@@ -25,7 +25,8 @@ data class DoseLogEntity(
     val dateStr: String, // "YYYY-MM-DD"
     val scheduledTime: String,
     val status: String, // "PENDING", "TAKEN", "MISSED", "SNOOZED"
-    val takenTime: String? = null
+    val takenTime: String? = null,
+    val escalationStage: Int = 0 // 0 = normal, 1 = Tier 1 (15m), 2 = Tier 2 (30m guardian prep)
 )
 
 @Entity(tableName = "guardians")

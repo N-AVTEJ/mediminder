@@ -38,13 +38,87 @@ data class MedicineFirebaseModel(
     val start_date: String = startDate
 )
 
+data class GuardianNotifyRecipient(
+    val guardianId: String,
+    val name: String,
+    val phone: String,
+    val relationship: String,
+    val guardianUid: String? = null,
+    val status: String = "linked"
+)
+
+data class GuardianNotifyPayload(
+    val alertId: String = "alert_" + UUID.randomUUID().toString().take(8),
+    val doseId: String,
+    val medicineName: String,
+    val dose: String,
+    val scheduledTime: String,
+    val formattedTime: String,
+    val minutesOverdue: Int = 30,
+    val escalationStage: Int = 2,
+    val patientId: String,
+    val patientName: String,
+    val patientPhone: String,
+    val timestamp: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date()),
+    val alertTitle: String = "⚠️ Missed Dose Alert (30m Overdue)",
+    val alertMessage: String = "URGENT CARE ALERT: $patientName missed scheduled dose of $medicineName ($dose) scheduled for $formattedTime (30 minutes overdue). Please check in with them immediately.",
+    val smsBody: String = "MedRemind Alert: $patientName has missed their dose of $medicineName ($dose) scheduled for $formattedTime by 30 minutes. Please check on them.",
+    val recipients: List<GuardianNotifyRecipient> = emptyList(),
+    val fcmPayload: Map<String, String> = emptyMap(),
+    val isDispatched: Boolean = false
+)
+
+/**
+ * Phase 26: Guardian FCM Push Notification Record
+ * Required Push Format: "{name} missed {medicine} {dose} ({time})"
+ * Deep link to check-in screen: medremind://checkin?... or https://medremind.app/checkin?...
+ */
+data class GuardianFcmPushRecord(
+    val id: String = "fcm_push_" + UUID.randomUUID().toString().take(8),
+    val patientId: String,
+    val patientName: String,
+    val medicineName: String,
+    val dose: String,
+    val scheduledTime: String,
+    val formattedTime: String,
+    val pushTitle: String = "⚠️ Caregiver Alert: Missed Dose",
+    val pushBody: String, // Required format: "{name} missed {medicine} {dose} ({time})"
+    val deepLinkUri: String, // "medremind://checkin?..."
+    val guardianRecipientId: String,
+    val guardianName: String,
+    val guardianPhone: String,
+    val guardianUid: String?,
+    val timestamp: String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date()),
+    val doseId: String = "",
+    val delivered: Boolean = true
+)
+
+/**
+ * Phase 26: Guardian Check-in Screen State
+ */
+data class GuardianCheckInState(
+    val doseId: String,
+    val patientId: String = "user_default_1",
+    val patientName: String = "Eleanor Vance",
+    val patientPhone: String = "+1 (555) 234-5678",
+    val medicineName: String = "Lisinopril",
+    val dose: String = "10mg",
+    val scheduledTime: String = "08:00 AM",
+    val minutesOverdue: Int = 45,
+    val deepLinkSource: String = "",
+    val checkInStatus: String = "PENDING" // "PENDING", "RESOLVED_TAKEN", "CALLED", "NOTE_RECORDED"
+)
+
 data class DoseFirebaseModel(
     val id: String = UUID.randomUUID().toString(),
     val medicineId: String,
     val scheduledTime: String, // e.g. "2026-07-26T08:00:00" in device timezone
     val status: String = "pending", // "pending", "taken", "missed"
     val medicine_id: String = medicineId,
-    val scheduled_time: String = scheduledTime
+    val scheduled_time: String = scheduledTime,
+    val escalationStage: Int = 0, // 0 = normal, 1 = Tier 1 (15m), 2 = Tier 2 (30m)
+    val escalation_stage: Int = escalationStage,
+    val guardianNotifyPayload: GuardianNotifyPayload? = null
 )
 
 data class AffiliateClickFirebaseModel(
@@ -422,5 +496,193 @@ class FirebaseSyncRepository private constructor() {
 
     fun markDoseTakenByMedicineAndSchedule(medicineName: String, scheduledTime: String): String? {
         return markDoseStatusByMedicineAndSchedule(medicineName, scheduledTime, "taken")
+    }
+
+    // Phase 25: Escalation Tier 2 & Guardian Notification Payloads
+    private val _preparedGuardianPayloads = MutableStateFlow<List<GuardianNotifyPayload>>(emptyList())
+    val preparedGuardianPayloads: StateFlow<List<GuardianNotifyPayload>> = _preparedGuardianPayloads.asStateFlow()
+
+    fun prepGuardianNotifyPayload(
+        doseId: String,
+        medicineName: String,
+        dose: String,
+        scheduledTime: String,
+        formattedTime: String
+    ): GuardianNotifyPayload {
+        val user = _currentUser.value
+        val patientName = user.name.ifBlank { "Eleanor Vance" }
+        val patientPhone = user.phone.ifBlank { "+1 (555) 234-5678" }
+        val activeGuardians = _guardians.value.map { g ->
+            GuardianNotifyRecipient(
+                guardianId = g.id,
+                name = g.name.ifBlank { "Caregiver" },
+                phone = g.guardianPhone,
+                relationship = g.relationship,
+                guardianUid = g.guardianUid,
+                status = g.status
+            )
+        }
+
+        val title = "⚠️ Missed Dose Alert (30m Overdue)"
+        val message = "URGENT CARE ALERT: $patientName has missed scheduled dose of $medicineName ($dose) scheduled for $formattedTime (30 minutes overdue). Please check in with them immediately."
+        val sms = "MedRemind Alert: $patientName has missed their scheduled dose of $medicineName ($dose) from $formattedTime by 30 minutes. Please check on them."
+
+        val fcmData = mapOf(
+            "type" to "GUARDIAN_ESCALATION_STAGE_2",
+            "dose_id" to doseId,
+            "patient_id" to user.id,
+            "patient_name" to patientName,
+            "patient_phone" to patientPhone,
+            "medicine_name" to medicineName,
+            "dose" to dose,
+            "scheduled_time" to scheduledTime,
+            "formatted_time" to formattedTime,
+            "escalation_stage" to "2",
+            "minutes_overdue" to "30",
+            "alert_title" to title,
+            "alert_message" to message
+        )
+
+        val payload = GuardianNotifyPayload(
+            doseId = doseId,
+            medicineName = medicineName,
+            dose = dose,
+            scheduledTime = scheduledTime,
+            formattedTime = formattedTime,
+            minutesOverdue = 30,
+            escalationStage = 2,
+            patientId = user.id,
+            patientName = patientName,
+            patientPhone = patientPhone,
+            alertTitle = title,
+            alertMessage = message,
+            smsBody = sms,
+            recipients = activeGuardians,
+            fcmPayload = fcmData,
+            isDispatched = false
+        )
+
+        val current = _preparedGuardianPayloads.value.toMutableList()
+        current.removeAll { it.doseId == doseId }
+        current.add(0, payload)
+        _preparedGuardianPayloads.value = current
+
+        markEscalationStage(doseId, 2, payload)
+        return payload
+    }
+
+    fun markEscalationStage(doseId: String, stage: Int, payload: GuardianNotifyPayload? = null) {
+        val currentDoses = _doses.value.toMutableList()
+        val index = currentDoses.indexOfFirst { it.id == doseId }
+        if (index != -1) {
+            val updated = currentDoses[index].copy(
+                escalationStage = stage,
+                escalation_stage = stage,
+                guardianNotifyPayload = payload ?: currentDoses[index].guardianNotifyPayload
+            )
+            currentDoses[index] = updated
+            _doses.value = currentDoses
+        }
+    }
+
+    fun markEscalationStageByMedicineAndSchedule(
+        medicineName: String,
+        scheduledTime: String,
+        stage: Int,
+        payload: GuardianNotifyPayload? = null
+    ): String? {
+        val dose = _doses.value.find { d ->
+            val med = _medicines.value.find { it.id == d.medicineId }
+            med?.name.equals(medicineName, ignoreCase = true) && d.scheduledTime.contains(scheduledTime)
+        }
+        if (dose != null) {
+            markEscalationStage(dose.id, stage, payload)
+            return dose.id
+        }
+        return null
+    }
+
+    fun removePreparedGuardianPayload(alertId: String) {
+        val current = _preparedGuardianPayloads.value.toMutableList()
+        current.removeAll { it.alertId == alertId }
+        _preparedGuardianPayloads.value = current
+    }
+
+    fun markGuardianPayloadDispatched(alertId: String) {
+        val current = _preparedGuardianPayloads.value.toMutableList()
+        val index = current.indexOfFirst { it.alertId == alertId }
+        if (index != -1) {
+            current[index] = current[index].copy(isDispatched = true)
+            _preparedGuardianPayloads.value = current
+        }
+    }
+
+    // Phase 26: Dispatched FCM Push Records State Flow
+    private val _dispatchedFcmPushes = MutableStateFlow<List<GuardianFcmPushRecord>>(emptyList())
+    val dispatchedFcmPushes: StateFlow<List<GuardianFcmPushRecord>> = _dispatchedFcmPushes.asStateFlow()
+
+    /**
+     * Phase 26: Send FCM push to all linked guardians:
+     * Format: "{name} missed {medicine} {dose} ({time})". Deep link to check-in screen.
+     */
+    fun sendFcmPushToLinkedGuardians(
+        doseId: String,
+        patientName: String? = null,
+        medicineName: String,
+        dose: String,
+        scheduledTimeStr: String
+    ): List<GuardianFcmPushRecord> {
+        val user = _currentUser.value
+        val effectivePatientName = (patientName ?: user.name).ifBlank { "Eleanor Vance" }
+        val effectivePhone = user.phone.ifBlank { "+1 (555) 234-5678" }
+
+        val formattedTime = if (scheduledTimeStr.isNotBlank()) {
+            com.example.utils.TimeUtils.fromUtcIsoStringToLocal12Hour(scheduledTimeStr)
+        } else "08:00 AM"
+
+        // Required push notification format: "{name} missed {medicine} {dose} ({time})"
+        val messageBody = "$effectivePatientName missed $medicineName $dose ($formattedTime)"
+
+        val linkedGuardians = _guardians.value.filter {
+            it.status.equals("linked", ignoreCase = true) || it.guardianUid.isNotBlank()
+        }.ifEmpty {
+            _guardians.value
+        }
+
+        val records = linkedGuardians.map { guardian ->
+            val encodedName = java.net.URLEncoder.encode(effectivePatientName, "UTF-8")
+            val encodedMed = java.net.URLEncoder.encode(medicineName, "UTF-8")
+            val encodedDose = java.net.URLEncoder.encode(dose, "UTF-8")
+            val encodedTime = java.net.URLEncoder.encode(formattedTime, "UTF-8")
+            val encodedPhone = java.net.URLEncoder.encode(effectivePhone, "UTF-8")
+            val deepLink = "medremind://checkin?doseId=$doseId&patientId=${user.id}&patientName=$encodedName&medicine=$encodedMed&dose=$encodedDose&time=$encodedTime&phone=$encodedPhone"
+
+            GuardianFcmPushRecord(
+                patientId = user.id,
+                patientName = effectivePatientName,
+                medicineName = medicineName,
+                dose = dose,
+                scheduledTime = scheduledTimeStr,
+                formattedTime = formattedTime,
+                pushTitle = "⚠️ Caregiver Alert: Missed Dose",
+                pushBody = messageBody,
+                deepLinkUri = deepLink,
+                guardianRecipientId = guardian.id,
+                guardianName = guardian.name.ifBlank { "Caregiver" },
+                guardianPhone = guardian.guardianPhone,
+                guardianUid = guardian.guardianUid,
+                doseId = doseId,
+                delivered = true
+            )
+        }
+
+        val current = _dispatchedFcmPushes.value.toMutableList()
+        current.addAll(0, records)
+        _dispatchedFcmPushes.value = current
+
+        // Update escalation stage to 3
+        markEscalationStage(doseId, 3)
+
+        return records
     }
 }

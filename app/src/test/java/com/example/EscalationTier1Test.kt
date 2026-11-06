@@ -114,13 +114,17 @@ class EscalationTier1Test {
 
         receiver.onReceive(context, intent)
 
-        // Wait brief moment for coroutine if needed or check posted notifications
-        Thread.sleep(150)
-
+        // Poll for notification posted by background coroutine
         val notifId = doseId.hashCode() + 100
-        val notification = shadowNotificationManager.getNotification(notifId)
+        var notification = shadowNotificationManager.getNotification(notifId)
+        val startTime = System.currentTimeMillis()
+        while (notification == null && (System.currentTimeMillis() - startTime) < 3000L) {
+            Thread.sleep(50)
+            notification = shadowNotificationManager.getNotification(notifId)
+        }
+
         assertNotNull("Escalation Tier 1 notification should be posted", notification)
-        assertEquals(NotificationScheduler.CHANNEL_ESCALATION_TIER1_ID, notification.channelId)
+        assertEquals(NotificationScheduler.CHANNEL_ESCALATION_TIER1_ID, notification!!.channelId)
         assertTrue(
             "Notification title should denote missed dose or urgent alert",
             notification.extras.getCharSequence("android.title").toString().contains("Missed", ignoreCase = true) ||

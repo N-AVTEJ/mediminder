@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.data.db.AppDatabase
 import com.example.data.firebase.FirebaseSyncRepository
+import com.example.data.firebase.GuardianNotifyPayload
 import com.example.data.repository.MedicineRepository
 import com.example.utils.TimeUtils
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +30,8 @@ class DoseNotificationReceiver : BroadcastReceiver() {
         const val ACTION_SHOW_NOTIFICATION = "com.example.action.SHOW_DOSE_NOTIFICATION"
         const val ACTION_MARK_TAKEN = "com.example.action.MARK_DOSE_TAKEN"
         const val ACTION_ESCALATION_TIER1 = "com.example.action.ESCALATION_TIER1"
+        const val ACTION_ESCALATION_TIER2 = "com.example.action.ESCALATION_TIER2"
+        const val ACTION_ESCALATION_TIER3 = "com.example.action.ESCALATION_TIER3"
         const val ACTION_CHECK_MISSED = "com.example.action.CHECK_MISSED_DOSE"
     }
 
@@ -45,6 +48,12 @@ class DoseNotificationReceiver : BroadcastReceiver() {
             }
             ACTION_ESCALATION_TIER1 -> {
                 handleEscalationTier1(context, doseId, medicineName, dose, scheduledTime)
+            }
+            ACTION_ESCALATION_TIER2 -> {
+                handleEscalationTier2(context, doseId, medicineName, dose, scheduledTime)
+            }
+            ACTION_ESCALATION_TIER3 -> {
+                handleEscalationTier3(context, doseId, medicineName, dose, scheduledTime)
             }
             ACTION_MARK_TAKEN -> {
                 markDoseTaken(context, doseId, medicineName, scheduledTime)
@@ -228,6 +237,217 @@ class DoseNotificationReceiver : BroadcastReceiver() {
         triggerDeviceVibration(context, strongVibrationPattern)
     }
 
+    /**
+     * Phase 25: Escalation tier 2
+     * If dose still missed 30 min, mark escalation stage 2, prep guardian notify payload
+     */
+    private fun handleEscalationTier2(
+        context: Context,
+        doseId: String,
+        medicineName: String,
+        dose: String,
+        scheduledTime: String
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // 1. Check if the dose has ALREADY been taken
+                val db = AppDatabase.getDatabase(context)
+                val repo = MedicineRepository(db)
+                val todayStr = repo.getTodayDateStr()
+                val todayLogs = db.doseLogDao().getLogsForDate(todayStr).firstOrNull() ?: emptyList()
+
+                val targetLog = todayLogs.find { it.medicineName == medicineName && it.scheduledTime == scheduledTime }
+                    ?: todayLogs.find { it.medicineName == medicineName && it.status == "PENDING" }
+
+                if (targetLog != null && targetLog.status.equals("TAKEN", ignoreCase = true)) {
+                    Log.d("DoseNotificationReceiver", "Escalation Tier 2 skipped: Dose $medicineName already taken.")
+                    return@launch
+                }
+
+                // 2. Mark escalation stage 2 in local Room DB
+                if (targetLog != null) {
+                    repo.updateDoseStatusAndStage(targetLog.id, "MISSED", 2)
+                }
+
+                // 3. Prepare Guardian Notify Payload
+                val formattedTime = if (scheduledTime.isNotBlank()) {
+                    TimeUtils.fromUtcIsoStringToLocal12Hour(scheduledTime)
+                } else "30 minutes ago"
+
+                val firebaseRepo = FirebaseSyncRepository.getInstance()
+                val payload = firebaseRepo.prepGuardianNotifyPayload(
+                    doseId = doseId,
+                    medicineName = medicineName,
+                    dose = dose,
+                    scheduledTime = scheduledTime,
+                    formattedTime = formattedTime
+                )
+
+                // Sync status and stage 2 to Firebase
+                if (doseId.isNotBlank()) {
+                    firebaseRepo.updateDoseStatusInFirebase(doseId, "missed")
+                }
+                firebaseRepo.markDoseStatusByMedicineAndSchedule(medicineName, scheduledTime, "missed")
+
+                // 4. Trigger loud notification & vibration with prepared guardian notify payload
+                showEscalationTier2Notification(context, doseId, medicineName, dose, scheduledTime, payload)
+            } catch (e: Exception) {
+                Log.e("DoseNotificationReceiver", "Error handling Escalation Tier 2", e)
+                val firebaseRepo = FirebaseSyncRepository.getInstance()
+                val payload = firebaseRepo.prepGuardianNotifyPayload(
+                    doseId = doseId,
+                    medicineName = medicineName,
+                    dose = dose,
+                    scheduledTime = scheduledTime,
+                    formattedTime = "30 minutes ago"
+                )
+                showEscalationTier2Notification(context, doseId, medicineName, dose, scheduledTime, payload)
+            }
+        }
+    }
+
+    private fun showEscalationTier2Notification(
+        context: Context,
+        doseId: String,
+        medicineName: String,
+        dose: String,
+        scheduledTime: String,
+        payload: GuardianNotifyPayload
+    ) {
+        NotificationScheduler.createNotificationChannels(context)
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Intent for tapping notification (Opens MainActivity with stage 2 escalation)
+        val openAppIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("ACTION", ACTION_ESCALATION_TIER2)
+            putExtra(NotificationScheduler.EXTRA_DOSE_ID, doseId)
+            putExtra(NotificationScheduler.EXTRA_MEDICINE_NAME, medicineName)
+            putExtra(NotificationScheduler.EXTRA_SCHEDULED_TIME, scheduledTime)
+            putExtra(NotificationScheduler.EXTRA_ESCALATION_STAGE, 2)
+            putExtra("ALERT_ID", payload.alertId)
+        }
+        val contentPendingIntent = PendingIntent.getActivity(
+            context,
+            doseId.hashCode() + 200,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Action: Mark Taken
+        val markTakenIntent = Intent(context, DoseNotificationReceiver::class.java).apply {
+            action = ACTION_MARK_TAKEN
+            putExtra(NotificationScheduler.EXTRA_DOSE_ID, doseId)
+            putExtra(NotificationScheduler.EXTRA_MEDICINE_NAME, medicineName)
+            putExtra(NotificationScheduler.EXTRA_SCHEDULED_TIME, scheduledTime)
+        }
+        val markTakenPendingIntent = PendingIntent.getBroadcast(
+            context,
+            doseId.hashCode() + 201,
+            markTakenIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        val strongVibrationPattern = longArrayOf(0, 1000, 300, 1000, 300, 1500)
+
+        val recipientNames = payload.recipients.joinToString(", ") { it.name }.ifBlank { "Registered Caregivers" }
+
+        val escalationTier2Notification = NotificationCompat.Builder(context, NotificationScheduler.CHANNEL_ESCALATION_TIER2_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle("🚨 STAGE 2 ESCALATION: Dose 30m Overdue")
+            .setContentText("$medicineName missed by 30 min. Guardian alert payload prepared for $recipientNames.")
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText("🚨 CRITICAL ESCALATION (STAGE 2 - 30 MIN OVERDUE)\n\n" +
+                            "You have not taken $medicineName ($dose) scheduled for ${payload.formattedTime}.\n\n" +
+                            "Guardian notification payload has been generated for:\n$recipientNames\n\n" +
+                            "Tap 'TAKE NOW' immediately to cancel guardian alert dispatch.")
+            )
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setColor(0xFFB71C1C.toInt()) // Deep critical alert red
+            .setSound(alarmSound)
+            .setVibrate(strongVibrationPattern)
+            .setLights(android.graphics.Color.RED, 1500, 500)
+            .setAutoCancel(true)
+            .setContentIntent(contentPendingIntent)
+            .addAction(
+                android.R.drawable.checkbox_on_background,
+                "✓ TAKE NOW",
+                markTakenPendingIntent
+            )
+            .setFullScreenIntent(contentPendingIntent, false)
+            .build()
+
+        val notifId = doseId.hashCode() + 200
+        notificationManager.notify(notifId, escalationTier2Notification)
+
+        triggerDeviceVibration(context, strongVibrationPattern)
+    }
+
+    /**
+     * Phase 26: Escalation tier 3 (guardian notify)
+     * Send FCM push to all linked guardians: "{name} missed {medicine} {dose} ({time})". Deep link to check-in screen.
+     */
+    private fun handleEscalationTier3(
+        context: Context,
+        doseId: String,
+        medicineName: String,
+        dose: String,
+        scheduledTime: String
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // 1. Check if the dose has ALREADY been taken
+                val db = AppDatabase.getDatabase(context)
+                val repo = MedicineRepository(db)
+                val todayStr = repo.getTodayDateStr()
+                val todayLogs = db.doseLogDao().getLogsForDate(todayStr).firstOrNull() ?: emptyList()
+
+                val targetLog = todayLogs.find { it.medicineName == medicineName && it.scheduledTime == scheduledTime }
+                    ?: todayLogs.find { it.medicineName == medicineName && it.status == "PENDING" }
+
+                if (targetLog != null && targetLog.status.equals("TAKEN", ignoreCase = true)) {
+                    Log.d("DoseNotificationReceiver", "Escalation Tier 3 skipped: Dose $medicineName already taken.")
+                    return@launch
+                }
+
+                // 2. Mark escalation stage 3 in Room DB
+                if (targetLog != null) {
+                    repo.updateDoseStatusAndStage(targetLog.id, "MISSED", 3)
+                }
+
+                // 3. Dispatch FCM Push to all linked guardians: "{name} missed {medicine} {dose} ({time})"
+                val firebaseRepo = FirebaseSyncRepository.getInstance()
+                val records = firebaseRepo.sendFcmPushToLinkedGuardians(
+                    doseId = doseId,
+                    patientName = null,
+                    medicineName = medicineName,
+                    dose = dose,
+                    scheduledTimeStr = scheduledTime
+                )
+
+                // 4. Post local caregiver notification simulating device FCM receipt with deep link to check-in screen
+                val firstRecord = records.firstOrNull()
+                val pushBody = firstRecord?.pushBody ?: "$medicineName missed ($scheduledTime)"
+                NotificationScheduler.postGuardianFcmPushNotification(context, firstRecord, pushBody)
+            } catch (e: Exception) {
+                Log.e("DoseNotificationReceiver", "Error in handleEscalationTier3", e)
+                val firebaseRepo = FirebaseSyncRepository.getInstance()
+                val records = firebaseRepo.sendFcmPushToLinkedGuardians(
+                    doseId = doseId,
+                    patientName = null,
+                    medicineName = medicineName,
+                    dose = dose,
+                    scheduledTimeStr = scheduledTime
+                )
+                NotificationScheduler.postGuardianFcmPushNotification(context, records.firstOrNull(), records.firstOrNull()?.pushBody ?: "Missed dose")
+            }
+        }
+    }
+
     private fun triggerDeviceVibration(context: Context, pattern: LongArray) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -261,11 +481,13 @@ class DoseNotificationReceiver : BroadcastReceiver() {
         medicineName: String,
         scheduledTime: String
     ) {
-        // Cancel both primary and escalation notifications
+        // Cancel primary, escalation tier 1, tier 2, and tier 3 notifications
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(doseId.hashCode())
         notificationManager.cancel(doseId.hashCode() + 100)
-        NotificationScheduler.cancelNotification(context, doseId) // Cancel any pending escalation
+        notificationManager.cancel(doseId.hashCode() + 200)
+        notificationManager.cancel(doseId.hashCode() + 300)
+        NotificationScheduler.cancelNotification(context, doseId) // Cancel any pending escalation alarms
 
         // 1. Update Firebase
         val firebaseRepo = FirebaseSyncRepository.getInstance()

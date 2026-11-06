@@ -54,6 +54,26 @@
                     android:host="invite"
                     android:scheme="medremind" />
             </intent-filter>
+
+            <!-- Phase 26: Deep link filter for Guardian Check-in Screen -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="medremind.app"
+                    android:pathPrefix="/checkin"
+                    android:scheme="https" />
+                <data
+                    android:host="medremind.app"
+                    android:pathPrefix="/checkin"
+                    android:scheme="http" />
+                <data
+                    android:host="checkin"
+                    android:scheme="medremind" />
+            </intent-filter>
         </activity>
 
         <receiver
@@ -63,6 +83,8 @@
                 <action android:name="com.example.action.SHOW_DOSE_NOTIFICATION" />
                 <action android:name="com.example.action.MARK_DOSE_TAKEN" />
                 <action android:name="com.example.action.ESCALATION_TIER1" />
+                <action android:name="com.example.action.ESCALATION_TIER2" />
+                <action android:name="com.example.action.ESCALATION_TIER3" />
                 <action android:name="com.example.action.CHECK_MISSED_DOSE" />
             </intent-filter>
         </receiver>

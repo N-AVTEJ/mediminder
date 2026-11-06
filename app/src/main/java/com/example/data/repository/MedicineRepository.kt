@@ -197,6 +197,14 @@ class MedicineRepository(
         doseLogDao.updateLogStatus(logId, status, if (status == "TAKEN") nowTime else null)
     }
 
+    suspend fun updateDoseEscalationStage(logId: Int, stage: Int) {
+        doseLogDao.updateEscalationStage(logId, stage)
+    }
+
+    suspend fun updateDoseStatusAndStage(logId: Int, status: String, stage: Int) {
+        doseLogDao.updateLogStatusAndStage(logId, status, stage)
+    }
+
     suspend fun addGuardian(guardian: GuardianEntity) {
         guardianDao.insertGuardian(guardian)
     }
